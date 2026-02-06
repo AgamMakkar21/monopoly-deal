@@ -1,0 +1,981 @@
+[
+  {
+    "id": "card-001",
+    "category": "property",
+    "name": "Brown Property",
+    "colors": [
+      "brown"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-002",
+    "category": "property",
+    "name": "Brown Property",
+    "colors": [
+      "brown"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-003",
+    "category": "property",
+    "name": "Light Blue Property",
+    "colors": [
+      "light_blue"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-004",
+    "category": "property",
+    "name": "Light Blue Property",
+    "colors": [
+      "light_blue"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-005",
+    "category": "property",
+    "name": "Light Blue Property",
+    "colors": [
+      "light_blue"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-006",
+    "category": "property",
+    "name": "Pink Property",
+    "colors": [
+      "pink"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-007",
+    "category": "property",
+    "name": "Pink Property",
+    "colors": [
+      "pink"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-008",
+    "category": "property",
+    "name": "Pink Property",
+    "colors": [
+      "pink"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-009",
+    "category": "property",
+    "name": "Orange Property",
+    "colors": [
+      "orange"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-010",
+    "category": "property",
+    "name": "Orange Property",
+    "colors": [
+      "orange"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-011",
+    "category": "property",
+    "name": "Orange Property",
+    "colors": [
+      "orange"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-012",
+    "category": "property",
+    "name": "Red Property",
+    "colors": [
+      "red"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-013",
+    "category": "property",
+    "name": "Red Property",
+    "colors": [
+      "red"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-014",
+    "category": "property",
+    "name": "Red Property",
+    "colors": [
+      "red"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-015",
+    "category": "property",
+    "name": "Yellow Property",
+    "colors": [
+      "yellow"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-016",
+    "category": "property",
+    "name": "Yellow Property",
+    "colors": [
+      "yellow"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-017",
+    "category": "property",
+    "name": "Yellow Property",
+    "colors": [
+      "yellow"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-018",
+    "category": "property",
+    "name": "Green Property",
+    "colors": [
+      "green"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-019",
+    "category": "property",
+    "name": "Green Property",
+    "colors": [
+      "green"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-020",
+    "category": "property",
+    "name": "Green Property",
+    "colors": [
+      "green"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-021",
+    "category": "property",
+    "name": "Blue Property",
+    "colors": [
+      "blue"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-022",
+    "category": "property",
+    "name": "Blue Property",
+    "colors": [
+      "blue"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-023",
+    "category": "property",
+    "name": "Railroad Property",
+    "colors": [
+      "railroad"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-024",
+    "category": "property",
+    "name": "Railroad Property",
+    "colors": [
+      "railroad"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-025",
+    "category": "property",
+    "name": "Railroad Property",
+    "colors": [
+      "railroad"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-026",
+    "category": "property",
+    "name": "Railroad Property",
+    "colors": [
+      "railroad"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-027",
+    "category": "property",
+    "name": "Utility Property",
+    "colors": [
+      "utility"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-028",
+    "category": "property",
+    "name": "Utility Property",
+    "colors": [
+      "utility"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-029",
+    "category": "wildcard",
+    "name": "Light Blue / Brown Wildcard",
+    "colors": [
+      "light_blue",
+      "brown"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-030",
+    "category": "wildcard",
+    "name": "Light Blue / Railroad Wildcard",
+    "colors": [
+      "light_blue",
+      "railroad"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-031",
+    "category": "wildcard",
+    "name": "Pink / Orange Wildcard",
+    "colors": [
+      "pink",
+      "orange"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-032",
+    "category": "wildcard",
+    "name": "Pink / Orange Wildcard",
+    "colors": [
+      "pink",
+      "orange"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-033",
+    "category": "wildcard",
+    "name": "Red / Yellow Wildcard",
+    "colors": [
+      "red",
+      "yellow"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-034",
+    "category": "wildcard",
+    "name": "Red / Yellow Wildcard",
+    "colors": [
+      "red",
+      "yellow"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-035",
+    "category": "wildcard",
+    "name": "Blue / Green Wildcard",
+    "colors": [
+      "blue",
+      "green"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-036",
+    "category": "wildcard",
+    "name": "Green / Railroad Wildcard",
+    "colors": [
+      "green",
+      "railroad"
+    ],
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-037",
+    "category": "wildcard",
+    "name": "Railroad / Utility Wildcard",
+    "colors": [
+      "railroad",
+      "utility"
+    ],
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-038",
+    "category": "wildcard",
+    "name": "Multi-color Wildcard",
+    "colors": [
+      "any"
+    ],
+    "value": 0,
+    "playable": true
+  },
+  {
+    "id": "card-039",
+    "category": "wildcard",
+    "name": "Multi-color Wildcard",
+    "colors": [
+      "any"
+    ],
+    "value": 0,
+    "playable": true
+  },
+  {
+    "id": "card-040",
+    "category": "action",
+    "actionType": "deal_breaker",
+    "name": "Deal Breaker",
+    "value": 5,
+    "playable": true
+  },
+  {
+    "id": "card-041",
+    "category": "action",
+    "actionType": "deal_breaker",
+    "name": "Deal Breaker",
+    "value": 5,
+    "playable": true
+  },
+  {
+    "id": "card-042",
+    "category": "action",
+    "actionType": "forced_deal",
+    "name": "Forced Deal",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-043",
+    "category": "action",
+    "actionType": "forced_deal",
+    "name": "Forced Deal",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-044",
+    "category": "action",
+    "actionType": "forced_deal",
+    "name": "Forced Deal",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-045",
+    "category": "action",
+    "actionType": "sly_deal",
+    "name": "Sly Deal",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-046",
+    "category": "action",
+    "actionType": "sly_deal",
+    "name": "Sly Deal",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-047",
+    "category": "action",
+    "actionType": "sly_deal",
+    "name": "Sly Deal",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-048",
+    "category": "action",
+    "actionType": "just_say_no",
+    "name": "Just Say No",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-049",
+    "category": "action",
+    "actionType": "just_say_no",
+    "name": "Just Say No",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-050",
+    "category": "action",
+    "actionType": "just_say_no",
+    "name": "Just Say No",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-051",
+    "category": "action",
+    "actionType": "debt_collector",
+    "name": "Debt Collector",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-052",
+    "category": "action",
+    "actionType": "debt_collector",
+    "name": "Debt Collector",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-053",
+    "category": "action",
+    "actionType": "debt_collector",
+    "name": "Debt Collector",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-054",
+    "category": "action",
+    "actionType": "birthday",
+    "name": "Birthday",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-055",
+    "category": "action",
+    "actionType": "birthday",
+    "name": "Birthday",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-056",
+    "category": "action",
+    "actionType": "birthday",
+    "name": "Birthday",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-057",
+    "category": "action",
+    "actionType": "double_rent",
+    "name": "Double Rent",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-058",
+    "category": "action",
+    "actionType": "double_rent",
+    "name": "Double Rent",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-059",
+    "category": "action",
+    "actionType": "house",
+    "name": "House",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-060",
+    "category": "action",
+    "actionType": "house",
+    "name": "House",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-061",
+    "category": "action",
+    "actionType": "house",
+    "name": "House",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-062",
+    "category": "action",
+    "actionType": "hotel",
+    "name": "Hotel",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-063",
+    "category": "action",
+    "actionType": "hotel",
+    "name": "Hotel",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-064",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-065",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-066",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-067",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-068",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-069",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-070",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-071",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-072",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-073",
+    "category": "action",
+    "actionType": "pass_go",
+    "name": "Pass Go",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-074",
+    "category": "rent",
+    "name": "Rent (Light Blue / Brown)",
+    "rentColors": [
+      "light_blue",
+      "brown"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-075",
+    "category": "rent",
+    "name": "Rent (Light Blue / Brown)",
+    "rentColors": [
+      "light_blue",
+      "brown"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-076",
+    "category": "rent",
+    "name": "Rent (Pink / Orange)",
+    "rentColors": [
+      "pink",
+      "orange"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-077",
+    "category": "rent",
+    "name": "Rent (Pink / Orange)",
+    "rentColors": [
+      "pink",
+      "orange"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-078",
+    "category": "rent",
+    "name": "Rent (Red / Yellow)",
+    "rentColors": [
+      "red",
+      "yellow"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-079",
+    "category": "rent",
+    "name": "Rent (Red / Yellow)",
+    "rentColors": [
+      "red",
+      "yellow"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-080",
+    "category": "rent",
+    "name": "Rent (Blue / Green)",
+    "rentColors": [
+      "blue",
+      "green"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-081",
+    "category": "rent",
+    "name": "Rent (Blue / Green)",
+    "rentColors": [
+      "blue",
+      "green"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-082",
+    "category": "rent",
+    "name": "Rent (Railroad / Utility)",
+    "rentColors": [
+      "railroad",
+      "utility"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-083",
+    "category": "rent",
+    "name": "Rent (Railroad / Utility)",
+    "rentColors": [
+      "railroad",
+      "utility"
+    ],
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-084",
+    "category": "rent",
+    "name": "Rent (Any Color)",
+    "rentColors": [
+      "any"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-085",
+    "category": "rent",
+    "name": "Rent (Any Color)",
+    "rentColors": [
+      "any"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-086",
+    "category": "rent",
+    "name": "Rent (Any Color)",
+    "rentColors": [
+      "any"
+    ],
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-087",
+    "category": "money",
+    "name": "$1M",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-088",
+    "category": "money",
+    "name": "$1M",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-089",
+    "category": "money",
+    "name": "$1M",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-090",
+    "category": "money",
+    "name": "$1M",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-091",
+    "category": "money",
+    "name": "$1M",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-092",
+    "category": "money",
+    "name": "$1M",
+    "value": 1,
+    "playable": true
+  },
+  {
+    "id": "card-093",
+    "category": "money",
+    "name": "$2M",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-094",
+    "category": "money",
+    "name": "$2M",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-095",
+    "category": "money",
+    "name": "$2M",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-096",
+    "category": "money",
+    "name": "$2M",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-097",
+    "category": "money",
+    "name": "$2M",
+    "value": 2,
+    "playable": true
+  },
+  {
+    "id": "card-098",
+    "category": "money",
+    "name": "$3M",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-099",
+    "category": "money",
+    "name": "$3M",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-100",
+    "category": "money",
+    "name": "$3M",
+    "value": 3,
+    "playable": true
+  },
+  {
+    "id": "card-101",
+    "category": "money",
+    "name": "$4M",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-102",
+    "category": "money",
+    "name": "$4M",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-103",
+    "category": "money",
+    "name": "$4M",
+    "value": 4,
+    "playable": true
+  },
+  {
+    "id": "card-104",
+    "category": "money",
+    "name": "$5M",
+    "value": 5,
+    "playable": true
+  },
+  {
+    "id": "card-105",
+    "category": "money",
+    "name": "$5M",
+    "value": 5,
+    "playable": true
+  },
+  {
+    "id": "card-106",
+    "category": "money",
+    "name": "$10M",
+    "value": 10,
+    "playable": true
+  },
+  {
+    "id": "card-107",
+    "category": "reference",
+    "name": "Reference Card",
+    "value": 0,
+    "playable": false
+  },
+  {
+    "id": "card-108",
+    "category": "reference",
+    "name": "Reference Card",
+    "value": 0,
+    "playable": false
+  },
+  {
+    "id": "card-109",
+    "category": "reference",
+    "name": "Reference Card",
+    "value": 0,
+    "playable": false
+  },
+  {
+    "id": "card-110",
+    "category": "reference",
+    "name": "Reference Card",
+    "value": 0,
+    "playable": false
+  }
+]
