@@ -31,11 +31,12 @@ This starts:
 4. Enter a different player name and same room ID, then click `Join Room`.
 5. Host clicks `Start Game`.
 6. On your turn:
-   - You auto-draw (2 cards, or 5 if your hand was empty at turn start).
+   - Click the deck in the center to draw (2 cards, or 5 if your hand is empty).
    - Play up to 3 cards using `To Property`, `To Bank`, or `Play Action`.
    - Click `End Turn`.
 7. If an action targets you, a 10-second reaction panel appears. Click `Just Say No` if you have that card in hand.
-8. First player with 3 full property sets of different colors wins.
+8. If you owe rent/debt/birthday payment, choose the exact table cards (bank/properties) to pay and submit.
+9. First player with 3 full property sets of different colors wins.
 
 ## Separate Commands (optional)
 

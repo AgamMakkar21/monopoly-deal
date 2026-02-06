@@ -4,17 +4,29 @@
 
 :root {
   color-scheme: light;
+  --table-green: #0f6c42;
+  --table-green-dark: #064128;
 }
 
 html,
 body {
   margin: 0;
   min-height: 100%;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  background: radial-gradient(circle at 20% 20%, var(--table-green) 0%, var(--table-green-dark) 70%);
   color: #111827;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, sans-serif;
 }
 
 * {
   box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Copperplate', 'Impact', 'Trebuchet MS', sans-serif;
+  letter-spacing: 0.02em;
 }

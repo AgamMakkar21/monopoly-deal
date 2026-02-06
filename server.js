@@ -95,7 +95,9 @@ function createRoom(roomId, hostSocketId, hostName) {
     discard: [],
     currentPlayerIndex: 0,
     cardsPlayedThisTurn: 0,
+    pendingTurnDraw: null,
     pendingReaction: null,
+    pendingPayment: null,
     turnEffects: {},
     winnerId: null,
     lastEvent: 'Room created',
@@ -200,53 +202,109 @@ function removeCardFromTable(player, cardId) {
   return null;
 }
 
-function applyPayment(payer, receiver, amount) {
-  if (amount <= 0 || tableValue(payer) === 0) {
+function tableCards(player) {
+  return [
+    ...player.bank.map((card) => ({
+      card,
+      zone: 'bank',
+    })),
+    ...Object.entries(player.properties).flatMap(([color, cards]) =>
+      cards.map((card) => ({
+        card,
+        zone: 'property',
+        color,
+      })),
+    ),
+  ];
+}
+
+function validateSelectedPayment(payer, amount, selectedCardIds) {
+  const allTableCards = tableCards(payer);
+  const allById = new Map(allTableCards.map((entry) => [entry.card.id, entry.card]));
+  const tableTotal = allTableCards.reduce((sum, entry) => sum + entry.card.value, 0);
+  const requestedIds = Array.isArray(selectedCardIds) ? selectedCardIds : [];
+  const uniqueIds = [...new Set(requestedIds)];
+
+  if (tableTotal === 0) {
+    if (uniqueIds.length > 0) {
+      return {
+        ok: false,
+        message: 'You have no table cards to pay with.',
+      };
+    }
+
     return {
+      ok: true,
+      cards: [],
       paid: 0,
-      requested: amount,
-      remaining: amount,
-      transferred: [],
+      tableTotal,
     };
   }
 
-  const candidates = [
-    ...payer.bank.map((card) => ({ card, priority: 0 })),
-    ...Object.values(payer.properties)
-      .flat()
-      .map((card) => ({ card, priority: 1 })),
-  ];
-
-  candidates.sort((a, b) => {
-    if (a.priority !== b.priority) {
-      return a.priority - b.priority;
+  const selectedCards = [];
+  for (const cardId of uniqueIds) {
+    const card = allById.get(cardId);
+    if (!card) {
+      return {
+        ok: false,
+        message: 'Selected payment cards must come from your table (bank/properties).',
+      };
     }
-    return a.card.value - b.card.value;
-  });
+    selectedCards.push(card);
+  }
 
-  let paid = 0;
+  const paid = selectedCards.reduce((sum, card) => sum + card.value, 0);
+
+  if (tableTotal >= amount && paid < amount) {
+    return {
+      ok: false,
+      message: `Selected cards total $${paid}M. You must pay at least $${amount}M.`,
+    };
+  }
+
+  if (tableTotal < amount && paid !== tableTotal) {
+    return {
+      ok: false,
+      message: `You cannot fully cover $${amount}M. Pay all table cards totaling $${tableTotal}M.`,
+    };
+  }
+
+  return {
+    ok: true,
+    cards: selectedCards,
+    paid,
+    tableTotal,
+  };
+}
+
+function applySelectedPayment(payer, receiver, amount, selectedCardIds) {
+  const validation = validateSelectedPayment(payer, amount, selectedCardIds);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      message: validation.message,
+    };
+  }
+
   const transferred = [];
-
-  for (const candidate of candidates) {
-    if (paid >= amount) {
-      break;
-    }
-
-    const removed = removeCardFromTable(payer, candidate.card.id);
+  for (const selected of validation.cards) {
+    const removed = removeCardFromTable(payer, selected.id);
     if (!removed) {
-      continue;
+      return {
+        ok: false,
+        message: 'Failed to transfer selected payment cards.',
+      };
     }
-
     transferred.push(removed);
-    paid += removed.value;
   }
 
   receiver.bank.push(...transferred);
 
   return {
-    paid,
+    ok: true,
+    paid: validation.paid,
     requested: amount,
-    remaining: Math.max(0, amount - paid),
+    remaining: Math.max(0, amount - validation.paid),
     transferred,
   };
 }
@@ -324,15 +382,16 @@ function startTurn(room) {
     return;
   }
 
-  const cardsToDraw = player.hand.length === 0 ? 5 : 2;
-  drawCards(room, player, cardsToDraw);
-
   room.cardsPlayedThisTurn = 0;
   room.turnEffects[player.id] = {
     rentMultiplier: 1,
   };
+  room.pendingTurnDraw = {
+    playerId: player.id,
+    count: player.hand.length === 0 ? 5 : 2,
+  };
 
-  room.lastEvent = `${player.name} starts turn and draws ${cardsToDraw}`;
+  room.lastEvent = `${player.name}'s turn. Click deck to draw ${room.pendingTurnDraw.count} cards`;
 }
 
 function checkWinner(room) {
@@ -344,6 +403,8 @@ function checkWinner(room) {
   room.winnerId = winner.id;
   room.lastEvent = `${winner.name} wins with 3 full sets`;
   room.started = false;
+  room.pendingTurnDraw = null;
+  room.pendingPayment = null;
 
   if (room.pendingReaction?.timer) {
     clearTimeout(room.pendingReaction.timer);
@@ -377,6 +438,30 @@ function safePendingReaction(pending) {
   };
 }
 
+function safePendingPayment(pending) {
+  if (!pending) {
+    return null;
+  }
+
+  const current = pending.queue[pending.currentIndex] || null;
+
+  return {
+    id: pending.id,
+    sourcePlayerId: pending.sourcePlayerId,
+    receiverPlayerId: pending.receiverPlayerId,
+    actionType: pending.actionType,
+    reason: pending.reason,
+    currentPayerId: current?.payerId || null,
+    amountDue: current?.amount || 0,
+    queue: pending.queue.map((entry) => ({
+      payerId: entry.payerId,
+      amount: entry.amount,
+      paid: entry.paid ?? null,
+      done: entry.paid !== null,
+    })),
+  };
+}
+
 function serializePlayerView(room, viewerId) {
   return {
     roomId: room.id,
@@ -386,7 +471,9 @@ function serializePlayerView(room, viewerId) {
     cardsPlayedThisTurn: room.cardsPlayedThisTurn,
     deckCount: room.deck.length,
     discardCount: room.discard.length,
+    pendingTurnDraw: room.pendingTurnDraw,
     pendingReaction: safePendingReaction(room.pendingReaction),
+    pendingPayment: safePendingPayment(room.pendingPayment),
     winnerId: room.winnerId,
     lastEvent: room.lastEvent,
     players: room.players.map((player) => ({
@@ -424,6 +511,67 @@ function queuePendingReaction(room, pending) {
   }, REACTION_WINDOW_MS);
 }
 
+function startPendingPayment(room, details) {
+  const queue = (details.queue || [])
+    .filter((entry) => entry.amount > 0)
+    .filter((entry) => getPlayer(room, entry.payerId))
+    .map((entry) => ({
+      payerId: entry.payerId,
+      amount: entry.amount,
+      paid: null,
+    }));
+
+  if (queue.length === 0) {
+    room.pendingPayment = null;
+    return false;
+  }
+
+  room.pendingPayment = {
+    id: `pay-${Date.now()}-${Math.random()}`,
+    sourcePlayerId: details.sourcePlayerId,
+    receiverPlayerId: details.receiverPlayerId,
+    actionType: details.actionType,
+    reason: details.reason,
+    queue,
+    currentIndex: 0,
+  };
+
+  const current = queue[0];
+  const payer = getPlayer(room, current.payerId);
+  const receiver = getPlayer(room, details.receiverPlayerId);
+  room.lastEvent = `${payer?.name || 'A player'} must choose cards to pay $${current.amount}M to ${
+    receiver?.name || 'receiver'
+  }`;
+
+  return true;
+}
+
+function advancePendingPayment(room) {
+  if (!room.pendingPayment) {
+    return;
+  }
+
+  while (room.pendingPayment.currentIndex < room.pendingPayment.queue.length) {
+    const current = room.pendingPayment.queue[room.pendingPayment.currentIndex];
+    if (getPlayer(room, current.payerId)) {
+      const payer = getPlayer(room, current.payerId);
+      const receiver = getPlayer(room, room.pendingPayment.receiverPlayerId);
+      room.lastEvent = `${payer?.name || 'A player'} must choose cards to pay $${current.amount}M to ${
+        receiver?.name || 'receiver'
+      }`;
+      return;
+    }
+    current.paid = 0;
+    room.pendingPayment.currentIndex += 1;
+  }
+
+  const totalPaid = room.pendingPayment.queue.reduce((sum, item) => sum + (item.paid || 0), 0);
+  const receiver = getPlayer(room, room.pendingPayment.receiverPlayerId);
+  const reason = room.pendingPayment.reason || 'payment';
+  room.lastEvent = `${receiver?.name || 'Receiver'} collected $${totalPaid}M (${reason})`;
+  room.pendingPayment = null;
+}
+
 function resolvePendingReaction(roomId, pendingId, canceledByPlayerId) {
   const room = rooms.get(roomId);
   if (!room) {
@@ -449,7 +597,9 @@ function resolvePendingReaction(roomId, pendingId, canceledByPlayerId) {
   }
 
   applyResolvedAction(room, pending.payload);
-  checkWinner(room);
+  if (!room.pendingPayment) {
+    checkWinner(room);
+  }
   emitState(room);
 }
 
@@ -465,22 +615,47 @@ function applyResolvedAction(room, payload) {
       return;
     }
 
-    const result = applyPayment(target, actor, payload.amount || 5);
-    room.lastEvent = `${actor.name} collected $${result.paid}M from ${target.name}`;
+    const started = startPendingPayment(room, {
+      sourcePlayerId: actor.id,
+      receiverPlayerId: actor.id,
+      actionType: 'debt_collector',
+      reason: 'Debt Collector',
+      queue: [
+        {
+          payerId: target.id,
+          amount: payload.amount || 5,
+        },
+      ],
+    });
+    if (!started) {
+      room.lastEvent = `${actor.name} played Debt Collector, but no payment was due`;
+    }
     return;
   }
 
   if (payload.type === 'birthday') {
-    let totalPaid = 0;
+    const queue = [];
     for (const targetId of payload.targetPlayerIds || []) {
       const target = getPlayer(room, targetId);
       if (!target || target.id === actor.id) {
         continue;
       }
-      const result = applyPayment(target, actor, 2);
-      totalPaid += result.paid;
+      queue.push({
+        payerId: target.id,
+        amount: 2,
+      });
     }
-    room.lastEvent = `${actor.name} collected Birthday payments totaling $${totalPaid}M`;
+
+    const started = startPendingPayment(room, {
+      sourcePlayerId: actor.id,
+      receiverPlayerId: actor.id,
+      actionType: 'birthday',
+      reason: "It's My Birthday",
+      queue,
+    });
+    if (!started) {
+      room.lastEvent = `${actor.name} played Birthday, but no payment was due`;
+    }
     return;
   }
 
@@ -490,8 +665,21 @@ function applyResolvedAction(room, payload) {
       return;
     }
 
-    const result = applyPayment(target, actor, payload.amount || 0);
-    room.lastEvent = `${actor.name} collected $${result.paid}M rent from ${target.name}`;
+    const started = startPendingPayment(room, {
+      sourcePlayerId: actor.id,
+      receiverPlayerId: actor.id,
+      actionType: 'rent',
+      reason: `Rent (${payload.rentColor || 'set'})`,
+      queue: [
+        {
+          payerId: target.id,
+          amount: payload.amount || 0,
+        },
+      ],
+    });
+    if (!started) {
+      room.lastEvent = `${actor.name} charged rent, but no payment was due`;
+    }
     return;
   }
 
@@ -593,11 +781,21 @@ function playCard(socket, payload) {
     return;
   }
 
+  if (room.pendingPayment) {
+    emitError(socket, 'Waiting for pending payment selection.');
+    return;
+  }
+
   const player = getPlayer(room, socket.id);
   const currentPlayer = getCurrentPlayer(room);
 
   if (!player || !currentPlayer || currentPlayer.id !== socket.id) {
     emitError(socket, 'It is not your turn.');
+    return;
+  }
+
+  if (room.pendingTurnDraw?.playerId === socket.id && room.pendingTurnDraw.count > 0) {
+    emitError(socket, 'Draw turn cards from the deck first.');
     return;
   }
 
@@ -893,6 +1091,7 @@ function playCard(socket, payload) {
       actorId: player.id,
       targetPlayerId: payload.targetPlayerId,
       amount: rentAmount,
+      rentColor: chosenColor,
     };
 
     const pendingId = `${Date.now()}-${Math.random()}`;
@@ -914,10 +1113,103 @@ function playCard(socket, payload) {
   emitError(socket, 'This card cannot be played as an action.');
 }
 
+function drawTurnCards(socket) {
+  const room = getRoomByPlayer(socket);
+  if (!room || !room.started || room.winnerId) {
+    emitError(socket, 'Game is not active.');
+    return;
+  }
+
+  if (room.pendingReaction) {
+    emitError(socket, 'Cannot draw during reaction window.');
+    return;
+  }
+
+  if (room.pendingPayment) {
+    emitError(socket, 'Cannot draw during pending payment.');
+    return;
+  }
+
+  const currentPlayer = getCurrentPlayer(room);
+  if (!currentPlayer || currentPlayer.id !== socket.id) {
+    emitError(socket, 'It is not your turn.');
+    return;
+  }
+
+  if (!room.pendingTurnDraw || room.pendingTurnDraw.playerId !== socket.id) {
+    emitError(socket, 'No turn draw is pending for you.');
+    return;
+  }
+
+  const requested = room.pendingTurnDraw.count;
+  const drawn = drawCards(room, currentPlayer, requested);
+  room.pendingTurnDraw = null;
+  room.lastEvent = `${currentPlayer.name} drew ${drawn} card${drawn === 1 ? '' : 's'} from deck`;
+  emitState(room);
+}
+
+function submitPendingPayment(socket, payload) {
+  const room = getRoomByPlayer(socket);
+  if (!room || !room.started || room.winnerId) {
+    emitError(socket, 'Game is not active.');
+    return;
+  }
+
+  const pending = room.pendingPayment;
+  if (!pending) {
+    emitError(socket, 'No payment is pending.');
+    return;
+  }
+
+  if (pending.id !== payload.paymentId) {
+    emitError(socket, 'Payment reference is out of date.');
+    return;
+  }
+
+  const current = pending.queue[pending.currentIndex];
+  if (!current) {
+    room.pendingPayment = null;
+    emitState(room);
+    return;
+  }
+
+  if (current.payerId !== socket.id) {
+    emitError(socket, 'It is not your payment turn.');
+    return;
+  }
+
+  const payer = getPlayer(room, current.payerId);
+  const receiver = getPlayer(room, pending.receiverPlayerId);
+  if (!payer || !receiver) {
+    room.pendingPayment = null;
+    emitState(room);
+    return;
+  }
+
+  const cardIds = Array.isArray(payload.cardIds) ? payload.cardIds : [];
+  const result = applySelectedPayment(payer, receiver, current.amount, cardIds);
+  if (!result.ok) {
+    emitError(socket, result.message);
+    return;
+  }
+
+  current.paid = result.paid;
+  room.lastEvent = `${payer.name} paid $${result.paid}M to ${receiver.name}`;
+  pending.currentIndex += 1;
+  advancePendingPayment(room);
+  checkWinner(room);
+  emitState(room);
+}
+
 function moveWildcard(socket, payload) {
   const room = getRoomByPlayer(socket);
   if (!room || !room.started) {
     emitError(socket, 'Game is not active.');
+    return;
+  }
+
+  if (room.pendingReaction || room.pendingPayment) {
+    emitError(socket, 'Cannot move wildcard while action resolution is pending.');
     return;
   }
 
@@ -970,9 +1262,19 @@ function endTurn(socket) {
     return;
   }
 
+  if (room.pendingPayment) {
+    emitError(socket, 'Cannot end turn while payment is pending.');
+    return;
+  }
+
   const currentPlayer = getCurrentPlayer(room);
   if (!currentPlayer || currentPlayer.id !== socket.id) {
     emitError(socket, 'It is not your turn.');
+    return;
+  }
+
+  if (room.pendingTurnDraw?.playerId === socket.id && room.pendingTurnDraw.count > 0) {
+    emitError(socket, 'You must draw your turn cards before ending turn.');
     return;
   }
 
@@ -1065,7 +1367,9 @@ io.on('connection', (socket) => {
     room.deck = buildDeck();
     room.currentPlayerIndex = 0;
     room.cardsPlayedThisTurn = 0;
+    room.pendingTurnDraw = null;
     room.pendingReaction = null;
+    room.pendingPayment = null;
     room.turnEffects = {};
 
     for (const player of room.players) {
@@ -1082,6 +1386,14 @@ io.on('connection', (socket) => {
 
   socket.on('game:play_card', (payload) => {
     playCard(socket, payload || {});
+  });
+
+  socket.on('game:draw_turn_cards', () => {
+    drawTurnCards(socket);
+  });
+
+  socket.on('game:submit_payment', (payload) => {
+    submitPendingPayment(socket, payload || {});
   });
 
   socket.on('game:move_wildcard', (payload) => {
@@ -1146,6 +1458,30 @@ io.on('connection', (socket) => {
 
     if (room.pendingReaction?.targetPlayerIds.includes(removed.id)) {
       resolvePendingReaction(room.id, room.pendingReaction.id, null);
+    }
+
+    if (room.pendingPayment) {
+      if (room.pendingPayment.receiverPlayerId === removed.id) {
+        room.pendingPayment = null;
+        room.lastEvent = `${removed.name} disconnected. Pending payment was canceled.`;
+      } else {
+        for (const entry of room.pendingPayment.queue) {
+          if (entry.payerId === removed.id && entry.paid === null) {
+            entry.paid = 0;
+          }
+        }
+
+        while (room.pendingPayment && room.pendingPayment.currentIndex < room.pendingPayment.queue.length) {
+          const currentEntry = room.pendingPayment.queue[room.pendingPayment.currentIndex];
+          if (currentEntry.paid !== null) {
+            room.pendingPayment.currentIndex += 1;
+            continue;
+          }
+          break;
+        }
+
+        advancePendingPayment(room);
+      }
     }
 
     if (room.players.length === 0) {
