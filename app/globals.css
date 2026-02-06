@@ -12,9 +12,12 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: radial-gradient(circle at 20% 20%, var(--table-green) 0%, var(--table-green-dark) 70%);
+  background: var(--table-green-dark);
   color: #111827;
   font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, sans-serif;
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {

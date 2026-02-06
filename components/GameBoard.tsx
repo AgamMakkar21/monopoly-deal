@@ -321,7 +321,7 @@ export default function GameBoard() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#1c7d4d_0%,#10532f_38%,#063520_100%)] px-3 py-4 text-zinc-100 md:px-5">
+    <div className="min-h-screen bg-emerald-900 px-3 py-4 text-zinc-100 md:px-5">
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4">
         <section className="rounded-2xl border border-white/20 bg-black/25 p-4 shadow-xl backdrop-blur">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -454,7 +454,7 @@ export default function GameBoard() {
                       disabled={!drawPendingForMe}
                       className={`h-40 w-28 rounded-xl border-2 p-2 text-left shadow-lg ${
                         drawPendingForMe
-                          ? 'border-yellow-300 bg-gradient-to-br from-yellow-200 to-yellow-400 text-zinc-900'
+                          ? 'border-yellow-300 bg-yellow-300 text-zinc-900'
                           : 'border-white/30 bg-white/10 text-white/80'
                       }`}
                     >

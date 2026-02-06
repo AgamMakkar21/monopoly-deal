@@ -23,70 +23,85 @@ type CardProps = {
   selected?: boolean;
 };
 
-const COLOR_MAP: Record<string, string> = {
-  brown: '#8b5a2b',
-  light_blue: '#53b5ea',
-  pink: '#e85ea8',
-  orange: '#ef8f2d',
-  red: '#de4037',
-  yellow: '#f0d349',
-  green: '#39a662',
-  blue: '#2457d6',
-  railroad: '#252525',
-  utility: '#8f8f8f',
-  neutral: '#3f3f46',
+const SET_REQUIREMENTS: Record<string, number> = {
+  brown: 2,
+  light_blue: 3,
+  pink: 3,
+  orange: 3,
+  red: 3,
+  yellow: 3,
+  green: 3,
+  blue: 2,
+  railroad: 4,
+  utility: 2,
 };
+
+const COLOR_SOLID: Record<string, string> = {
+  brown: '#be6b2b',
+  light_blue: '#41c5ff',
+  pink: '#ff4fae',
+  orange: '#ff8d1c',
+  red: '#ff3b30',
+  yellow: '#ffd51f',
+  green: '#1fc96a',
+  blue: '#2f56ff',
+  railroad: '#2b2b2b',
+  utility: '#9ca3af',
+  neutral: '#52525b',
+};
+
+const LIGHT_COLORS = new Set(['yellow', 'light_blue', 'utility']);
 
 const ACTION_THEME: Record<string, { title: string; icon: ReactNode; bg: string }> = {
   deal_breaker: {
     title: 'Deal Breaker',
     icon: <Building2 className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#3b82f6 0%,#111827 100%)',
+    bg: '#1440cf',
   },
   forced_deal: {
     title: 'Forced Deal',
     icon: <ArrowLeftRight className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#06b6d4 0%,#1d4ed8 100%)',
+    bg: '#0f7cc2',
   },
   sly_deal: {
     title: 'Sly Deal',
     icon: <HandCoins className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#f59e0b 0%,#b45309 100%)',
+    bg: '#dc7f00',
   },
   just_say_no: {
     title: 'Just Say No',
     icon: <Shield className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#ef4444 0%,#7f1d1d 100%)',
+    bg: '#cb2e2e',
   },
   debt_collector: {
     title: 'Debt Collector',
     icon: <CircleDollarSign className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#65a30d 0%,#14532d 100%)',
+    bg: '#4b8f1b',
   },
   birthday: {
     title: "It's My Birthday",
     icon: <CircleDollarSign className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#ec4899 0%,#8b5cf6 100%)',
+    bg: '#c53f9d',
   },
   double_rent: {
     title: 'Double Rent',
     icon: <CircleDollarSign className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#f59e0b 0%,#ef4444 100%)',
+    bg: '#cc5c1f',
   },
   house: {
     title: 'House',
     icon: <Building2 className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#22c55e 0%,#166534 100%)',
+    bg: '#1f9952',
   },
   hotel: {
     title: 'Hotel',
     icon: <Building2 className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#0ea5e9 0%,#1e3a8a 100%)',
+    bg: '#0a6fb5',
   },
   pass_go: {
     title: 'Pass Go',
     icon: <CircleDollarSign className="h-4 w-4" />,
-    bg: 'linear-gradient(135deg,#14b8a6 0%,#0f766e 100%)',
+    bg: '#0f8d86',
   },
 };
 
@@ -95,40 +110,8 @@ function colorLabel(color: string): string {
   return color.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function cardTone(card: CardData): string {
-  if (card.category === 'money') return 'linear-gradient(165deg,#fefce8 0%,#dcfce7 55%,#bbf7d0 100%)';
-
-  if (card.category === 'action') {
-    return ACTION_THEME[card.actionType || '']?.bg || 'linear-gradient(165deg,#e4e4e7 0%,#a1a1aa 100%)';
-  }
-
-  if (card.category === 'rent') {
-    const colors = card.rentColors || [];
-    if (colors[0] === 'any') {
-      return 'linear-gradient(90deg,#de4037 0%,#f0d349 20%,#39a662 40%,#2457d6 60%,#e85ea8 80%,#8b5a2b 100%)';
-    }
-    const a = COLOR_MAP[colors[0] || 'neutral'];
-    const b = COLOR_MAP[colors[1] || colors[0] || 'neutral'];
-    return `linear-gradient(120deg,${a} 0%,${b} 100%)`;
-  }
-
-  if (card.category === 'wildcard') {
-    const colors = card.colors || [];
-    if (colors[0] === 'any') {
-      return 'linear-gradient(90deg,#de4037 0%,#f0d349 20%,#39a662 40%,#2457d6 60%,#e85ea8 80%,#8b5a2b 100%)';
-    }
-    const assigned = card.assignedColor ? [card.assignedColor] : colors;
-    const a = COLOR_MAP[assigned[0] || colors[0] || 'neutral'];
-    const b = COLOR_MAP[assigned[1] || colors[1] || assigned[0] || 'neutral'];
-    return `linear-gradient(135deg,${a} 0%,${b} 100%)`;
-  }
-
-  if (card.category === 'property') {
-    const tone = COLOR_MAP[card.assignedColor || card.colors?.[0] || 'neutral'];
-    return `linear-gradient(165deg,#ffffff 0%,#f4f4f5 55%,${tone}33 100%)`;
-  }
-
-  return 'linear-gradient(165deg,#fafafa 0%,#e4e4e7 100%)';
+function setRequirement(color: string): number {
+  return SET_REQUIREMENTS[color] ?? 0;
 }
 
 function categoryLabel(card: CardData): string {
@@ -140,18 +123,102 @@ function categoryLabel(card: CardData): string {
   return card.category;
 }
 
+function faceColor(card: CardData): string {
+  if (card.category === 'money') return '#1f9e54';
+  if (card.category === 'action') return ACTION_THEME[card.actionType || '']?.bg || '#52525b';
+
+  if (card.category === 'property') {
+    const color = card.assignedColor || card.colors?.[0] || 'neutral';
+    return COLOR_SOLID[color] || COLOR_SOLID.neutral;
+  }
+
+  if (card.category === 'rent') {
+    if (card.rentColors?.[0] === 'any') return '#6d28d9';
+    return COLOR_SOLID[card.rentColors?.[0] || 'neutral'] || COLOR_SOLID.neutral;
+  }
+
+  if (card.category === 'wildcard') return '#ffffff';
+  return '#e4e4e7';
+}
+
+function textColor(card: CardData): string {
+  if (card.category === 'wildcard') return 'text-zinc-900';
+  if (card.category === 'property') {
+    const color = card.assignedColor || card.colors?.[0] || 'neutral';
+    return LIGHT_COLORS.has(color) ? 'text-zinc-900' : 'text-white';
+  }
+
+  if (card.category === 'rent') {
+    const color = card.rentColors?.[0] || 'neutral';
+    return LIGHT_COLORS.has(color) ? 'text-zinc-900' : 'text-white';
+  }
+
+  if (card.category === 'money') return 'text-white';
+  return 'text-white';
+}
+
 function detailText(card: CardData): string {
-  if (card.category === 'property') return colorLabel(card.assignedColor || card.colors?.[0] || 'brown');
+  if (card.category === 'property') {
+    const color = card.assignedColor || card.colors?.[0] || 'brown';
+    return `${colorLabel(color)} | Full Set ${setRequirement(color)}`;
+  }
+
   if (card.category === 'wildcard') {
     if (card.colors?.[0] === 'any') return 'Any color set';
-    return (card.colors || []).map((color) => colorLabel(color)).join(' / ');
+    return (card.colors || [])
+      .map((color) => `${colorLabel(color)} (${setRequirement(color)})`)
+      .join(' / ');
   }
+
   if (card.category === 'rent') {
     if (card.rentColors?.[0] === 'any') return 'Charge rent on any set';
-    return (card.rentColors || []).map((color) => colorLabel(color)).join(' / ');
+    return (card.rentColors || [])
+      .map((color) => `${colorLabel(color)} (${setRequirement(color)})`)
+      .join(' / ');
   }
+
   if (card.category === 'money') return `Bank value $${card.value}M`;
   return card.actionType ? card.actionType.replaceAll('_', ' ') : card.name;
+}
+
+function fullSetBadge(card: CardData): string | null {
+  if (card.category === 'property') {
+    const color = card.assignedColor || card.colors?.[0] || 'brown';
+    return `FULL SET ${setRequirement(color)}`;
+  }
+
+  if (card.category === 'wildcard' && card.assignedColor) {
+    return `SET ${setRequirement(card.assignedColor)}`;
+  }
+
+  return null;
+}
+
+function wildcardBands(card: CardData): { top: string; bottom: string; topLabel: string; bottomLabel: string } | null {
+  if (card.category !== 'wildcard') return null;
+
+  if (card.colors?.[0] === 'any') {
+    return {
+      top: '#ff3b30',
+      bottom: '#2f56ff',
+      topLabel: 'ANY',
+      bottomLabel: 'COLOR',
+    };
+  }
+
+  const topColorKey = card.colors?.[0] || 'neutral';
+  const bottomColorKey = card.colors?.[1] || topColorKey;
+
+  return {
+    top: COLOR_SOLID[topColorKey] || COLOR_SOLID.neutral,
+    bottom: COLOR_SOLID[bottomColorKey] || COLOR_SOLID.neutral,
+    topLabel: colorLabel(topColorKey),
+    bottomLabel: colorLabel(bottomColorKey),
+  };
+}
+
+function bandTextClass(colorKey: string): string {
+  return LIGHT_COLORS.has(colorKey) ? 'text-zinc-900' : 'text-white';
 }
 
 export default function Card({
@@ -162,32 +229,69 @@ export default function Card({
   compact = false,
   selected = false,
 }: CardProps) {
-  const cardWidth = compact ? 'w-[124px]' : 'w-[162px]';
+  const cardWidth = compact ? 'w-[130px]' : 'w-[176px]';
+  const cardText = textColor(card);
+  const badge = fullSetBadge(card);
+  const bands = wildcardBands(card);
+  const topBandColorKey = card.colors?.[0] || 'neutral';
+  const bottomBandColorKey = card.colors?.[1] || topBandColorKey;
 
   return (
     <article
       className={`${cardWidth} rounded-2xl border-2 ${
-        selected ? 'border-amber-500 ring-2 ring-amber-300' : 'border-white/80'
-      } bg-white/95 p-2 shadow-[0_8px_20px_rgba(0,0,0,0.2)] transition-transform hover:-translate-y-0.5`}
+        selected ? 'border-amber-400 ring-2 ring-amber-300' : 'border-zinc-100/90'
+      } bg-white p-2 shadow-[0_10px_24px_rgba(0,0,0,0.3)] transition-transform hover:-translate-y-0.5`}
     >
       <div
-        className="relative overflow-hidden rounded-xl border border-white/80"
-        style={{ background: cardTone(card), aspectRatio: '63 / 88' }}
+        className="relative overflow-hidden rounded-xl border-2 border-white/85"
+        style={{ backgroundColor: faceColor(card), aspectRatio: '63 / 88' }}
       >
-        <div className="absolute inset-0 opacity-25 [background-image:radial-gradient(circle_at_20%_20%,white_0,transparent_50%),radial-gradient(circle_at_80%_75%,white_0,transparent_55%)]" />
+        <div className="absolute inset-2 rounded-lg border border-white/40" />
 
-        <div className="relative flex h-full flex-col justify-between p-2 text-white">
-          <div className="rounded-md border border-white/70 bg-black/25 px-1.5 py-1 text-[10px] font-black uppercase tracking-wide">
-            {categoryLabel(card)}
+        {bands ? (
+          <>
+            <div className="absolute inset-x-0 top-0 h-[24%] border-b border-black/30" style={{ backgroundColor: bands.top }}>
+              <div className={`pt-1 text-center text-[10px] font-black uppercase tracking-wide ${bandTextClass(topBandColorKey)}`}>
+                {bands.topLabel}
+              </div>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-[24%] border-t border-black/30" style={{ backgroundColor: bands.bottom }}>
+              <div className={`pt-2 text-center text-[10px] font-black uppercase tracking-wide ${bandTextClass(bottomBandColorKey)}`}>
+                {bands.bottomLabel}
+              </div>
+            </div>
+          </>
+        ) : null}
+
+        <div className={`relative flex h-full flex-col justify-between p-2 ${bands ? 'pt-8 pb-8' : ''}`}>
+          <div className="flex items-start justify-between gap-1">
+            <div className={`rounded-md border border-white/70 bg-black/35 px-2 py-1 text-[10px] font-black uppercase tracking-[0.09em] ${cardText}`}>
+              {categoryLabel(card)}
+            </div>
+            {card.category === 'action' && ACTION_THEME[card.actionType || ''] ? (
+              <div className="rounded-md border border-white/70 bg-black/30 p-1 text-white">
+                {ACTION_THEME[card.actionType || ''].icon}
+              </div>
+            ) : null}
           </div>
 
-          <div className="space-y-1 text-center">
-            <p className="px-1 text-[11px] font-black leading-4 text-white drop-shadow">{card.name}</p>
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-white/90">{detailText(card)}</p>
+          <div className="space-y-1.5 text-center">
+            <p className={`px-1 text-[12px] font-black leading-4 ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.45)]`}>
+              {card.name}
+            </p>
+            <p className={`px-1 text-[10px] font-bold uppercase tracking-[0.08em] ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.45)]`}>
+              {detailText(card)}
+            </p>
+
+            {badge ? (
+              <div className="mx-auto inline-flex rounded-full border border-black/25 bg-white/90 px-2 py-0.5 text-[9px] font-black tracking-wide text-zinc-900">
+                {badge}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex justify-end">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-red-600 bg-white/95 text-[11px] font-extrabold text-red-700 shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-red-700 bg-white text-[12px] font-extrabold text-red-700 shadow-[0_2px_4px_rgba(0,0,0,0.35)]">
               ${card.value}
             </div>
           </div>
@@ -200,7 +304,7 @@ export default function Card({
             <button
               key={option}
               type="button"
-              className="rounded border border-zinc-300 bg-white px-2 py-1 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-100"
+              className="rounded border border-zinc-300 bg-white px-2 py-1 text-[10px] font-bold text-zinc-800 hover:bg-zinc-100"
               onClick={() => onWildcardMove(option)}
             >
               Move {colorLabel(option)}
