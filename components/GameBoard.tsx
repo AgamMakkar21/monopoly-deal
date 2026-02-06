@@ -488,7 +488,12 @@ export default function GameBoard() {
 
                 <div className="grid gap-3 xl:grid-cols-2">
                   {gameState.players.map((player) => (
-                    <article key={player.id} className="rounded-xl border border-white/20 bg-black/25 p-3">
+                    <article
+                      key={player.id}
+                      className={`rounded-xl border p-3 ${
+                        player.id === myId ? 'border-emerald-300/45 bg-black/30' : 'border-sky-300/45 bg-black/35'
+                      }`}
+                    >
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-black text-white">{player.name}</span>
                         {gameState.currentPlayerId === player.id ? (
@@ -511,15 +516,24 @@ export default function GameBoard() {
                         </span>
                       </div>
 
-                      {player.bank.length > 0 ? (
-                        <div className="mb-2 flex flex-wrap gap-2">
+                      <div className="mb-2 rounded-lg border border-white/20 bg-white/5 p-2">
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-sky-100">
+                          Bank Cards (Visible)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
                           {player.bank.map((card) => (
-                            <Card key={card.id} card={card} compact />
+                            <Card key={card.id} card={card} compact={player.id === myId} />
                           ))}
+                          {player.bank.length === 0 ? (
+                            <p className="text-xs text-zinc-300">No bank cards on table.</p>
+                          ) : null}
                         </div>
-                      ) : null}
+                      </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-2 rounded-lg border border-white/20 bg-white/5 p-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.1em] text-sky-100">
+                          Property Sets (Visible)
+                        </p>
                         {Object.entries(player.properties)
                           .filter(([, cards]) => cards.length > 0)
                           .map(([color, cards]) => (
@@ -532,7 +546,9 @@ export default function GameBoard() {
                                   <Card
                                     key={card.id}
                                     card={card}
-                                    compact
+                                    compact={player.id === myId}
+                                    setColor={color}
+                                    setCards={cards}
                                     wildcardMoveOptions={
                                       player.id === myId && card.category === 'wildcard' ? wildcardMoveOptions(card) : []
                                     }
@@ -546,6 +562,9 @@ export default function GameBoard() {
                               </div>
                             </div>
                           ))}
+                        {Object.values(player.properties).every((cards) => cards.length === 0) ? (
+                          <p className="text-xs text-zinc-300">No property cards on table.</p>
+                        ) : null}
                       </div>
                     </article>
                   ))}
@@ -686,6 +705,12 @@ export default function GameBoard() {
                   <Card
                     card={entry.card}
                     compact
+                    setColor={entry.zone === 'property' ? entry.color : undefined}
+                    setCards={
+                      entry.zone === 'property' && entry.color && me
+                        ? me.properties[entry.color]
+                        : undefined
+                    }
                     selected={selectedPaymentIds.includes(entry.card.id)}
                     actions={
                       <button

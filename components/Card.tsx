@@ -21,6 +21,8 @@ type CardProps = {
   onWildcardMove?: (nextColor: string) => void;
   compact?: boolean;
   selected?: boolean;
+  setColor?: string;
+  setCards?: CardData[];
 };
 
 const SET_REQUIREMENTS: Record<string, number> = {
@@ -34,6 +36,19 @@ const SET_REQUIREMENTS: Record<string, number> = {
   blue: 2,
   railroad: 4,
   utility: 2,
+};
+
+const RENT_TABLE: Record<string, number[]> = {
+  brown: [1, 2],
+  light_blue: [1, 2, 3],
+  pink: [1, 2, 4],
+  orange: [1, 3, 5],
+  red: [2, 3, 6],
+  yellow: [2, 4, 6],
+  green: [2, 4, 7],
+  blue: [3, 8],
+  railroad: [1, 2, 3, 4],
+  utility: [1, 2],
 };
 
 const COLOR_SOLID: Record<string, string> = {
@@ -112,6 +127,10 @@ function colorLabel(color: string): string {
 
 function setRequirement(color: string): number {
   return SET_REQUIREMENTS[color] ?? 0;
+}
+
+function rentSchedule(color: string): number[] {
+  return RENT_TABLE[color] || [1];
 }
 
 function categoryLabel(card: CardData): string {
@@ -194,6 +213,25 @@ function fullSetBadge(card: CardData): string | null {
   return null;
 }
 
+function currentRent(setColor: string | undefined, setCards: CardData[] | undefined): number | null {
+  if (!setColor || !setCards || setCards.length === 0) {
+    return null;
+  }
+
+  const schedule = rentSchedule(setColor);
+  const size = Math.max(1, Math.min(setCards.length, schedule.length));
+  let rent = schedule[size - 1];
+
+  const isFullSet = setCards.length >= setRequirement(setColor);
+  if (isFullSet && setColor !== 'railroad' && setColor !== 'utility') {
+    const houses = setCards.filter((card) => card.actionType === 'house').length;
+    const hotels = setCards.filter((card) => card.actionType === 'hotel').length;
+    rent += houses * 3 + hotels * 4;
+  }
+
+  return rent;
+}
+
 function wildcardBands(card: CardData): { top: string; bottom: string; topLabel: string; bottomLabel: string } | null {
   if (card.category !== 'wildcard') return null;
 
@@ -228,6 +266,8 @@ export default function Card({
   onWildcardMove,
   compact = false,
   selected = false,
+  setColor,
+  setCards,
 }: CardProps) {
   const cardWidth = compact ? 'w-[130px]' : 'w-[176px]';
   const cardText = textColor(card);
@@ -235,6 +275,9 @@ export default function Card({
   const bands = wildcardBands(card);
   const topBandColorKey = card.colors?.[0] || 'neutral';
   const bottomBandColorKey = card.colors?.[1] || topBandColorKey;
+  const effectiveColor = card.category === 'property' ? (card.assignedColor || card.colors?.[0]) : null;
+  const schedule = effectiveColor ? rentSchedule(effectiveColor) : [];
+  const liveRent = currentRent(setColor, setCards);
 
   return (
     <article
@@ -282,6 +325,22 @@ export default function Card({
             <p className={`px-1 text-[10px] font-bold uppercase tracking-[0.08em] ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.45)]`}>
               {detailText(card)}
             </p>
+
+            {card.category === 'property' && schedule.length > 0 ? (
+              <div className="mx-auto flex max-w-[92%] flex-wrap justify-center gap-1 rounded-md border border-black/25 bg-white/90 px-1 py-1 text-[8px] font-black text-zinc-900">
+                {schedule.map((value, idx) => (
+                  <span key={`${card.id}-rent-${idx}`} className="rounded bg-zinc-100 px-1.5 py-0.5">
+                    {idx + 1}:{value}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {liveRent !== null ? (
+              <div className="mx-auto inline-flex rounded-full border border-black/25 bg-yellow-200 px-2 py-0.5 text-[9px] font-black tracking-wide text-zinc-900">
+                CURRENT RENT ${liveRent}M
+              </div>
+            ) : null}
 
             {badge ? (
               <div className="mx-auto inline-flex rounded-full border border-black/25 bg-white/90 px-2 py-0.5 text-[9px] font-black tracking-wide text-zinc-900">
