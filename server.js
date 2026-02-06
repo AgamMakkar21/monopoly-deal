@@ -298,7 +298,25 @@ function applySelectedPayment(payer, receiver, amount, selectedCardIds) {
     transferred.push(removed);
   }
 
-  receiver.bank.push(...transferred);
+  for (const card of transferred) {
+    if (card.category === 'property') {
+      const color = card.assignedColor || card.colors?.[0];
+      addPropertyCard(receiver, card, color);
+      continue;
+    }
+
+    if (card.category === 'wildcard') {
+      const color =
+        card.assignedColor ||
+        (card.colors?.[0] && card.colors[0] !== 'any' ? card.colors[0] : null);
+      if (color) {
+        addPropertyCard(receiver, card, color);
+        continue;
+      }
+    }
+
+    receiver.bank.push(card);
+  }
 
   return {
     ok: true,
@@ -1161,7 +1179,7 @@ function submitPendingPayment(socket, payload) {
     return;
   }
 
-  if (pending.id !== payload.paymentId) {
+  if (payload.paymentId && pending.id !== payload.paymentId) {
     emitError(socket, 'Payment reference is out of date.');
     return;
   }
@@ -1186,7 +1204,9 @@ function submitPendingPayment(socket, payload) {
     return;
   }
 
-  const cardIds = Array.isArray(payload.cardIds) ? payload.cardIds : [];
+  const cardIds = Array.isArray(payload.cardIds)
+    ? payload.cardIds.map((id) => String(id))
+    : [];
   const result = applySelectedPayment(payer, receiver, current.amount, cardIds);
   if (!result.ok) {
     emitError(socket, result.message);

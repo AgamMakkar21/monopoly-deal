@@ -118,6 +118,34 @@ function canCardUseAction(card: CardData): boolean {
   return card.actionType !== 'just_say_no' && card.actionType !== 'house' && card.actionType !== 'hotel';
 }
 
+function groupCardsByKey(cards: CardData[], keyFn: (card: CardData) => string): CardData[][] {
+  const grouped = new Map<string, CardData[]>();
+  for (const card of cards) {
+    const key = keyFn(card);
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
+    }
+    grouped.get(key)?.push(card);
+  }
+  return [...grouped.values()];
+}
+
+function bankStackKey(card: CardData): string {
+  if (card.category === 'property') {
+    return `property-color-${card.colors?.[0] || 'neutral'}`;
+  }
+
+  if (card.category === 'wildcard') {
+    return `wildcard-color-${card.assignedColor || (card.colors || []).join('_')}`;
+  }
+
+  if (card.category === 'rent') {
+    return `rent-${(card.rentColors || []).join('_')}`;
+  }
+
+  return `${card.category}-${card.name}`;
+}
+
 export default function GameBoard() {
   const socketRef = useRef<Socket | null>(null);
 
@@ -247,6 +275,36 @@ export default function GameBoard() {
       .filter((entry) => idSet.has(entry.card.id))
       .reduce((sum, entry) => sum + entry.card.value, 0);
   }, [myTableCards, selectedPaymentIds]);
+
+  const myTableTotal = useMemo(
+    () => myTableCards.reduce((sum, entry) => sum + entry.card.value, 0),
+    [myTableCards],
+  );
+
+  const paymentSelectionState = useMemo(() => {
+    if (!pendingPayment || !paymentTurnForMe) {
+      return { valid: false, message: '' };
+    }
+
+    if (myTableTotal === 0) {
+      return {
+        valid: selectedPaymentTotal === 0,
+        message: 'No table cards: submit with $0',
+      };
+    }
+
+    if (myTableTotal < pendingPayment.amountDue) {
+      return {
+        valid: selectedPaymentTotal === myTableTotal,
+        message: `Select all table cards ($${myTableTotal}M total)`,
+      };
+    }
+
+    return {
+      valid: selectedPaymentTotal >= pendingPayment.amountDue,
+      message: `Select at least $${pendingPayment.amountDue}M`,
+    };
+  }, [pendingPayment, paymentTurnForMe, myTableTotal, selectedPaymentTotal]);
 
   function emit(event: string, payload?: Record<string, unknown>) {
     if (!socketRef.current) return;
@@ -437,6 +495,11 @@ export default function GameBoard() {
                 <span className="font-bold">{playerNameById.get(pendingPayment.currentPayerId || '') || 'N/A'}</span>{' '}
                 needs to pay <span className="font-bold">${pendingPayment.amountDue}M</span>
               </p>
+              <p className="mt-1 text-xs text-cyan-100">
+                {paymentTurnForMe
+                  ? 'Your turn to select payment cards from your table.'
+                  : `Waiting for ${playerNameById.get(pendingPayment.currentPayerId || '') || 'player'} to submit payment.`}
+              </p>
             </div>
           ) : null}
         </section>
@@ -520,9 +583,24 @@ export default function GameBoard() {
                         <p className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-sky-100">
                           Bank Cards (Visible)
                         </p>
-                        <div className="flex flex-wrap gap-2">
-                          {player.bank.map((card) => (
-                            <Card key={card.id} card={card} compact={player.id === myId} />
+                        <div className="flex flex-wrap gap-3">
+                          {groupCardsByKey(player.bank, bankStackKey).map((stack) => (
+                            <div key={stack[0].id} className="relative flex items-start">
+                              {stack.map((card, idx) => (
+                                <div
+                                  key={card.id}
+                                  className={idx === 0 ? '' : player.id === myId ? '-ml-16' : '-ml-24'}
+                                  style={{ zIndex: idx + 1 }}
+                                >
+                                  <Card card={card} compact={player.id === myId} />
+                                </div>
+                              ))}
+                              {stack.length > 1 ? (
+                                <span className="absolute -right-2 -top-2 rounded-full bg-yellow-300 px-1.5 py-0.5 text-[9px] font-black text-zinc-900">
+                                  x{stack.length}
+                                </span>
+                              ) : null}
+                            </div>
                           ))}
                           {player.bank.length === 0 ? (
                             <p className="text-xs text-zinc-300">No bank cards on table.</p>
@@ -541,23 +619,39 @@ export default function GameBoard() {
                               <p className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${SET_BADGE[color] || 'bg-white/20'}`}>
                                 {colorLabel(color)} ({cards.length})
                               </p>
-                              <div className="flex flex-wrap gap-2">
-                                {cards.map((card) => (
-                                  <Card
-                                    key={card.id}
-                                    card={card}
-                                    compact={player.id === myId}
-                                    setColor={color}
-                                    setCards={cards}
-                                    wildcardMoveOptions={
-                                      player.id === myId && card.category === 'wildcard' ? wildcardMoveOptions(card) : []
-                                    }
-                                    onWildcardMove={
-                                      player.id === myId && card.category === 'wildcard'
-                                        ? (nextColor) => moveWildcard(card.id, nextColor)
-                                        : undefined
-                                    }
-                                  />
+                              <div className="flex flex-wrap gap-3">
+                                {[cards].map((stack) => (
+                                  <div key={stack[0].id} className="relative flex items-start">
+                                    {stack.map((card, idx) => (
+                                      <div
+                                        key={card.id}
+                                        className={idx === 0 ? '' : player.id === myId ? '-ml-16' : '-ml-24'}
+                                        style={{ zIndex: idx + 1 }}
+                                      >
+                                        <Card
+                                          card={card}
+                                          compact={player.id === myId}
+                                          setColor={color}
+                                          setCards={cards}
+                                          wildcardMoveOptions={
+                                            player.id === myId && card.category === 'wildcard'
+                                              ? wildcardMoveOptions(card)
+                                              : []
+                                          }
+                                          onWildcardMove={
+                                            player.id === myId && card.category === 'wildcard'
+                                              ? (nextColor) => moveWildcard(card.id, nextColor)
+                                              : undefined
+                                          }
+                                        />
+                                      </div>
+                                    ))}
+                                    {stack.length > 1 ? (
+                                      <span className="absolute -right-2 -top-2 rounded-full bg-yellow-300 px-1.5 py-0.5 text-[9px] font-black text-zinc-900">
+                                        x{stack.length}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 ))}
                               </div>
                             </div>
@@ -698,6 +792,13 @@ export default function GameBoard() {
               Due: <span className="font-black">${pendingPayment.amountDue}M</span> | Selected:{' '}
               <span className="font-black">${selectedPaymentTotal}M</span>
             </p>
+            <p
+              className={`mt-1 text-xs ${
+                paymentSelectionState.valid ? 'text-emerald-200' : 'text-yellow-100'
+              }`}
+            >
+              {paymentSelectionState.message}
+            </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
               {myTableCards.map((entry) => (
@@ -711,6 +812,7 @@ export default function GameBoard() {
                         ? me.properties[entry.color]
                         : undefined
                     }
+                    onCardClick={() => togglePaymentCard(entry.card.id)}
                     selected={selectedPaymentIds.includes(entry.card.id)}
                     actions={
                       <button
@@ -736,7 +838,8 @@ export default function GameBoard() {
             <button
               type="button"
               onClick={submitPayment}
-              className="mt-3 rounded bg-yellow-400 px-3 py-2 text-xs font-black text-zinc-900"
+              disabled={!paymentSelectionState.valid}
+              className="mt-3 rounded bg-yellow-400 px-3 py-2 text-xs font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-400"
             >
               Submit Payment
             </button>

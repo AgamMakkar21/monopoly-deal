@@ -2,7 +2,7 @@
   {
     "id": "card-001",
     "category": "property",
-    "name": "Brown Property",
+    "name": "Mediterranean Avenue",
     "colors": [
       "brown"
     ],
@@ -12,7 +12,7 @@
   {
     "id": "card-002",
     "category": "property",
-    "name": "Brown Property",
+    "name": "Baltic Avenue",
     "colors": [
       "brown"
     ],
@@ -22,7 +22,7 @@
   {
     "id": "card-003",
     "category": "property",
-    "name": "Light Blue Property",
+    "name": "Oriental Avenue",
     "colors": [
       "light_blue"
     ],
@@ -32,7 +32,7 @@
   {
     "id": "card-004",
     "category": "property",
-    "name": "Light Blue Property",
+    "name": "Vermont Avenue",
     "colors": [
       "light_blue"
     ],
@@ -42,7 +42,7 @@
   {
     "id": "card-005",
     "category": "property",
-    "name": "Light Blue Property",
+    "name": "Connecticut Avenue",
     "colors": [
       "light_blue"
     ],
@@ -52,7 +52,7 @@
   {
     "id": "card-006",
     "category": "property",
-    "name": "Pink Property",
+    "name": "St. Charles Place",
     "colors": [
       "pink"
     ],
@@ -62,7 +62,7 @@
   {
     "id": "card-007",
     "category": "property",
-    "name": "Pink Property",
+    "name": "States Avenue",
     "colors": [
       "pink"
     ],
@@ -72,7 +72,7 @@
   {
     "id": "card-008",
     "category": "property",
-    "name": "Pink Property",
+    "name": "Virginia Avenue",
     "colors": [
       "pink"
     ],
@@ -82,7 +82,7 @@
   {
     "id": "card-009",
     "category": "property",
-    "name": "Orange Property",
+    "name": "St. James Place",
     "colors": [
       "orange"
     ],
@@ -92,7 +92,7 @@
   {
     "id": "card-010",
     "category": "property",
-    "name": "Orange Property",
+    "name": "Tennessee Avenue",
     "colors": [
       "orange"
     ],
@@ -102,7 +102,7 @@
   {
     "id": "card-011",
     "category": "property",
-    "name": "Orange Property",
+    "name": "New York Avenue",
     "colors": [
       "orange"
     ],
@@ -112,7 +112,7 @@
   {
     "id": "card-012",
     "category": "property",
-    "name": "Red Property",
+    "name": "Kentucky Avenue",
     "colors": [
       "red"
     ],
@@ -122,7 +122,7 @@
   {
     "id": "card-013",
     "category": "property",
-    "name": "Red Property",
+    "name": "Indiana Avenue",
     "colors": [
       "red"
     ],
@@ -132,7 +132,7 @@
   {
     "id": "card-014",
     "category": "property",
-    "name": "Red Property",
+    "name": "Illinois Avenue",
     "colors": [
       "red"
     ],
@@ -142,7 +142,7 @@
   {
     "id": "card-015",
     "category": "property",
-    "name": "Yellow Property",
+    "name": "Atlantic Avenue",
     "colors": [
       "yellow"
     ],
@@ -152,7 +152,7 @@
   {
     "id": "card-016",
     "category": "property",
-    "name": "Yellow Property",
+    "name": "Ventnor Avenue",
     "colors": [
       "yellow"
     ],
@@ -162,7 +162,7 @@
   {
     "id": "card-017",
     "category": "property",
-    "name": "Yellow Property",
+    "name": "Marvin Gardens",
     "colors": [
       "yellow"
     ],
@@ -172,7 +172,7 @@
   {
     "id": "card-018",
     "category": "property",
-    "name": "Green Property",
+    "name": "Pacific Avenue",
     "colors": [
       "green"
     ],
@@ -182,7 +182,7 @@
   {
     "id": "card-019",
     "category": "property",
-    "name": "Green Property",
+    "name": "North Carolina Avenue",
     "colors": [
       "green"
     ],
@@ -192,7 +192,7 @@
   {
     "id": "card-020",
     "category": "property",
-    "name": "Green Property",
+    "name": "Pennsylvania Avenue",
     "colors": [
       "green"
     ],
@@ -202,7 +202,7 @@
   {
     "id": "card-021",
     "category": "property",
-    "name": "Blue Property",
+    "name": "Park Place",
     "colors": [
       "blue"
     ],
@@ -212,7 +212,7 @@
   {
     "id": "card-022",
     "category": "property",
-    "name": "Blue Property",
+    "name": "Boardwalk",
     "colors": [
       "blue"
     ],
@@ -222,7 +222,7 @@
   {
     "id": "card-023",
     "category": "property",
-    "name": "Railroad Property",
+    "name": "Reading Railroad",
     "colors": [
       "railroad"
     ],
@@ -232,7 +232,7 @@
   {
     "id": "card-024",
     "category": "property",
-    "name": "Railroad Property",
+    "name": "Pennsylvania Railroad",
     "colors": [
       "railroad"
     ],
@@ -242,7 +242,7 @@
   {
     "id": "card-025",
     "category": "property",
-    "name": "Railroad Property",
+    "name": "B. & O. Railroad",
     "colors": [
       "railroad"
     ],
@@ -252,7 +252,7 @@
   {
     "id": "card-026",
     "category": "property",
-    "name": "Railroad Property",
+    "name": "Short Line",
     "colors": [
       "railroad"
     ],
@@ -262,7 +262,7 @@
   {
     "id": "card-027",
     "category": "property",
-    "name": "Utility Property",
+    "name": "Electric Company",
     "colors": [
       "utility"
     ],
@@ -272,7 +272,7 @@
   {
     "id": "card-028",
     "category": "property",
-    "name": "Utility Property",
+    "name": "Water Works",
     "colors": [
       "utility"
     ],
