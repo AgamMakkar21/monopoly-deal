@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { ArrowLeftRight, Building2, CircleDollarSign, HandCoins, Shield } from 'lucide-react';
 
 export type CardData = {
@@ -67,6 +67,8 @@ const COLOR_SOLID: Record<string, string> = {
 };
 
 const LIGHT_COLORS = new Set(['yellow', 'light_blue', 'utility']);
+const RAINBOW_TEXT_GRADIENT =
+  'linear-gradient(90deg,#ff5a45 0%,#ff9730 18%,#ffd84a 34%,#35cf76 50%,#48cfff 66%,#4f67ff 82%,#ff61c2 100%)';
 
 const ACTION_THEME: Record<string, { title: string; icon: ReactNode; bg: string; hint: string }> = {
   deal_breaker: {
@@ -145,7 +147,17 @@ function rentSchedule(color: string): number[] {
 }
 
 function faceColor(card: CardData): string {
-  if (card.category === 'money') return '#1f9e54';
+  if (card.category === 'money') {
+    const moneyColor: Record<number, string> = {
+      1: '#22a45b',
+      2: '#2f8bcf',
+      3: '#df7f1d',
+      4: '#af4fcb',
+      5: '#d6ac18',
+      10: '#4f5fb4',
+    };
+    return moneyColor[card.value] || '#1f9e54';
+  }
   if (card.category === 'action') return ACTION_THEME[card.actionType || '']?.bg || '#52525b';
 
   if (card.category === 'property') {
@@ -163,6 +175,10 @@ function faceColor(card: CardData): string {
 }
 
 function textColor(card: CardData): string {
+  const isAnyWildcard = card.category === 'wildcard' && card.colors?.[0] === 'any';
+  const isAnyRent = card.category === 'rent' && card.rentColors?.[0] === 'any';
+  if (isAnyWildcard || isAnyRent) return 'text-white';
+
   if (card.category === 'wildcard') return 'text-zinc-900';
 
   if (card.category === 'property') {
@@ -254,12 +270,12 @@ function wildcardBands(card: CardData): { top: string; bottom: string; topLabel:
 
   if (card.colors?.[0] === 'any') {
     return {
-      top: '#ff3b30',
-      bottom: '#2f56ff',
+      top: '#111111',
+      bottom: '#111111',
       topLabel: 'ANY',
       bottomLabel: 'COLOR',
-      topKey: 'red',
-      bottomKey: 'blue',
+      topKey: 'any',
+      bottomKey: 'any',
     };
   }
 
@@ -277,6 +293,9 @@ function wildcardBands(card: CardData): { top: string; bottom: string; topLabel:
 }
 
 function bandTextClass(colorKey: string): string {
+  if (colorKey === 'any') {
+    return 'text-white';
+  }
   return LIGHT_COLORS.has(colorKey) ? 'text-zinc-900' : 'text-white';
 }
 
@@ -286,6 +305,16 @@ function lineClampStyle(lines: number) {
     WebkitLineClamp: lines,
     WebkitBoxOrient: 'vertical' as const,
     overflow: 'hidden',
+  };
+}
+
+function rainbowTextStyle(): CSSProperties {
+  return {
+    backgroundImage: RAINBOW_TEXT_GRADIENT,
+    backgroundClip: 'text',
+    WebkitBackgroundClip: 'text',
+    color: 'transparent',
+    WebkitTextFillColor: 'transparent',
   };
 }
 
@@ -300,7 +329,7 @@ export default function Card({
   setCards,
   onCardClick,
 }: CardProps) {
-  const cardWidth = compact ? 'w-[130px]' : 'w-[176px]';
+  const cardWidth = compact ? 'w-[142px]' : 'w-[176px]';
   const cardText = textColor(card);
   const badge = fullSetBadge(card);
   const bands = wildcardBands(card);
@@ -308,6 +337,24 @@ export default function Card({
   const effectiveColor = card.category === 'property' ? (card.assignedColor || card.colors?.[0]) : null;
   const schedule = effectiveColor ? rentSchedule(effectiveColor) : [];
   const liveRent = currentRent(setColor, setCards);
+  const isAnyWildcard = card.category === 'wildcard' && card.colors?.[0] === 'any';
+  const isAnyRent = card.category === 'rent' && card.rentColors?.[0] === 'any';
+  const useRainbowText = isAnyWildcard || isAnyRent;
+  const rainbowStyle = useRainbowText ? rainbowTextStyle() : undefined;
+  const isSplitRent = card.category === 'rent' && !isAnyRent && (card.rentColors?.length || 0) > 1;
+  const splitRentTop = COLOR_SOLID[card.rentColors?.[0] || 'neutral'] || COLOR_SOLID.neutral;
+  const splitRentBottom =
+    COLOR_SOLID[card.rentColors?.[1] || card.rentColors?.[0] || 'neutral'] || COLOR_SOLID.neutral;
+
+  const faceStyle: CSSProperties = {
+    aspectRatio: '63 / 88',
+    backgroundColor: faceColor(card),
+  };
+
+  if (useRainbowText) {
+    faceStyle.background = 'none';
+    faceStyle.backgroundColor = '#050505';
+  }
 
   return (
     <article
@@ -320,19 +367,38 @@ export default function Card({
     >
       <div
         className="relative overflow-hidden rounded-xl border-2 border-white/85"
-        style={{ backgroundColor: faceColor(card), aspectRatio: '63 / 88' }}
+        style={faceStyle}
       >
         <div className="absolute inset-2 rounded-lg border border-white/35" />
 
+        {isSplitRent ? (
+          <>
+            <div className="absolute inset-x-0 top-0 h-1/2 border-b border-black/30" style={{ backgroundColor: splitRentTop }} />
+            <div className="absolute inset-x-0 bottom-0 h-1/2 border-t border-black/30" style={{ backgroundColor: splitRentBottom }} />
+          </>
+        ) : null}
+
         {bands ? (
           <>
-            <div className="absolute inset-x-0 top-0 z-10 h-[22%] border-b-2 border-black/30" style={{ backgroundColor: bands.top }}>
-              <div className={`flex h-full items-center justify-center px-1 text-center text-[10px] font-black uppercase tracking-wide ${bandTextClass(bands.topKey)}`}>
+            <div
+              className="absolute inset-x-0 top-0 z-10 h-[22%] border-b-2 border-black/30"
+              style={{ background: bands.top }}
+            >
+              <div
+                className={`flex h-full items-center justify-center px-1 text-center text-[10px] font-black uppercase tracking-wide ${bandTextClass(bands.topKey)}`}
+                style={bands.topKey === 'any' ? rainbowStyle : undefined}
+              >
                 {bands.topLabel}
               </div>
             </div>
-            <div className="absolute inset-x-0 bottom-0 z-10 h-[22%] border-t-2 border-black/30" style={{ backgroundColor: bands.bottom }}>
-              <div className={`flex h-full items-center justify-center px-1 text-center text-[10px] font-black uppercase tracking-wide ${bandTextClass(bands.bottomKey)}`}>
+            <div
+              className="absolute inset-x-0 bottom-0 z-10 h-[22%] border-t-2 border-black/30"
+              style={{ background: bands.bottom }}
+            >
+              <div
+                className={`flex h-full items-center justify-center px-1 text-center text-[10px] font-black uppercase tracking-wide ${bandTextClass(bands.bottomKey)}`}
+                style={bands.bottomKey === 'any' ? rainbowStyle : undefined}
+              >
                 {bands.bottomLabel}
               </div>
             </div>
@@ -353,24 +419,24 @@ export default function Card({
 
           <div className="space-y-1 text-center">
             <p
-              className={`mx-auto px-1 font-black ${compact ? 'text-[11px] leading-3.5' : 'text-[12px] leading-4'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
+              className={`mx-auto break-words px-1 font-black ${compact ? 'text-[10px] leading-3.5' : 'text-[12px] leading-4'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
               style={lineClampStyle(2)}
             >
-              {cardTitle(card)}
+              <span style={rainbowStyle}>{cardTitle(card)}</span>
             </p>
 
             <p
-              className={`mx-auto px-1 font-extrabold tracking-[0.01em] ${compact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
+              className={`mx-auto break-words px-1 font-extrabold tracking-[0.01em] ${compact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
               style={lineClampStyle(compact ? 1 : 2)}
             >
-              {cardHint(card)}
+              <span style={rainbowStyle}>{cardHint(card)}</span>
             </p>
 
             <p
-              className={`mx-auto px-1 font-bold tracking-[0.01em] ${compact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.45)]`}
+              className={`mx-auto break-words px-1 font-bold tracking-[0.01em] ${compact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.45)]`}
               style={lineClampStyle(2)}
             >
-              {detailText(card)}
+              <span style={rainbowStyle}>{detailText(card)}</span>
             </p>
 
             {card.category === 'property' && schedule.length > 0 ? (

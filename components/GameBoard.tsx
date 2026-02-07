@@ -58,6 +58,17 @@ type PendingPayment = {
   queue: PendingPaymentEntry[];
 };
 
+type PendingDiscard = {
+  playerId: string;
+  count: number;
+};
+
+type PendingActionChoice = {
+  id: string;
+  actorId: string;
+  actionType: 'sly_deal' | 'forced_deal';
+};
+
 type GameState = {
   roomId: string;
   started: boolean;
@@ -69,6 +80,9 @@ type GameState = {
   pendingTurnDraw: PendingTurnDraw | null;
   pendingReaction: PendingReaction | null;
   pendingPayment: PendingPayment | null;
+  pendingDiscard: PendingDiscard | null;
+  pendingActionChoice: PendingActionChoice | null;
+  turnUndoableCardIds: string[];
   winnerId: string | null;
   lastEvent: string;
   players: PlayerView[];
@@ -94,6 +108,19 @@ const PROPERTY_COLORS = [
   'utility',
 ] as const;
 
+const SET_REQUIREMENTS: Record<string, number> = {
+  brown: 2,
+  light_blue: 3,
+  pink: 3,
+  orange: 3,
+  red: 3,
+  yellow: 3,
+  green: 3,
+  blue: 2,
+  railroad: 4,
+  utility: 2,
+};
+
 const SET_BADGE: Record<string, string> = {
   brown: 'bg-amber-700/80',
   light_blue: 'bg-sky-400/85',
@@ -118,6 +145,11 @@ function canCardUseAction(card: CardData): boolean {
   return card.actionType !== 'just_say_no' && card.actionType !== 'house' && card.actionType !== 'hotel';
 }
 
+function isFullSet(cards: CardData[], color: string): boolean {
+  const needed = SET_REQUIREMENTS[color] || Number.MAX_SAFE_INTEGER;
+  return cards.length >= needed;
+}
+
 function groupCardsByKey(cards: CardData[], keyFn: (card: CardData) => string): CardData[][] {
   const grouped = new Map<string, CardData[]>();
   for (const card of cards) {
@@ -131,6 +163,10 @@ function groupCardsByKey(cards: CardData[], keyFn: (card: CardData) => string): 
 }
 
 function bankStackKey(card: CardData): string {
+  if (card.category === 'money') {
+    return 'money-stack';
+  }
+
   if (card.category === 'property') {
     return `property-color-${card.colors?.[0] || 'neutral'}`;
   }
@@ -157,6 +193,10 @@ export default function GameBoard() {
   const [selectedTargetId, setSelectedTargetId] = useState('');
   const [selectedColor, setSelectedColor] = useState<string>('brown');
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [selectedDiscardIds, setSelectedDiscardIds] = useState<string[]>([]);
+  const [choiceTargetId, setChoiceTargetId] = useState('');
+  const [choiceTargetCardId, setChoiceTargetCardId] = useState('');
+  const [choiceActorCardId, setChoiceActorCardId] = useState('');
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
 
@@ -220,6 +260,8 @@ export default function GameBoard() {
   const pendingReaction = gameState?.pendingReaction || null;
   const pendingTurnDraw = gameState?.pendingTurnDraw || null;
   const pendingPayment = gameState?.pendingPayment || null;
+  const pendingDiscard = gameState?.pendingDiscard || null;
+  const pendingActionChoice = gameState?.pendingActionChoice || null;
 
   const drawPendingForMe = pendingTurnDraw?.playerId === myId;
   const reactionSeconds = pendingReaction ? Math.max(0, Math.ceil((pendingReaction.expiresAt - now) / 1000)) : 0;
@@ -233,6 +275,8 @@ export default function GameBoard() {
   const isHost = gameState?.hostId === myId;
 
   const paymentTurnForMe = pendingPayment?.currentPayerId === myId;
+  const discardTurnForMe = pendingDiscard?.playerId === myId;
+  const actionChoiceTurnForMe = pendingActionChoice?.actorId === myId;
 
   const canPlayCards = Boolean(
     gameState?.started &&
@@ -240,6 +284,8 @@ export default function GameBoard() {
       !hasWinner &&
       !pendingReaction &&
       !pendingPayment &&
+      !pendingDiscard &&
+      !pendingActionChoice &&
       (!pendingTurnDraw || !drawPendingForMe),
   );
 
@@ -258,6 +304,10 @@ export default function GameBoard() {
     setSelectedPaymentIds([]);
   }, [pendingPayment?.id, pendingPayment?.currentPayerId]);
 
+  useEffect(() => {
+    setSelectedDiscardIds([]);
+  }, [pendingDiscard?.playerId, pendingDiscard?.count]);
+
   const myTableCards = useMemo<TableCardEntry[]>(() => {
     if (!me) return [];
 
@@ -268,6 +318,62 @@ export default function GameBoard() {
 
     return [...bankCards, ...propertyCards];
   }, [me]);
+
+  const stealableByPlayer = useMemo(() => {
+    const map = new Map<string, TableCardEntry[]>();
+    for (const player of gameState?.players || []) {
+      const options: TableCardEntry[] = [];
+      for (const card of player.bank) {
+        options.push({
+          card,
+          zone: 'bank',
+        });
+      }
+      for (const [color, cards] of Object.entries(player.properties)) {
+        if (isFullSet(cards, color)) {
+          continue;
+        }
+        for (const card of cards) {
+          if (card.actionType === 'house' || card.actionType === 'hotel') {
+            continue;
+          }
+          options.push({
+            card,
+            zone: 'property',
+            color,
+          });
+        }
+      }
+      map.set(player.id, options);
+    }
+    return map;
+  }, [gameState]);
+
+  useEffect(() => {
+    if (!pendingActionChoice || pendingActionChoice.actorId !== myId) {
+      setChoiceTargetId('');
+      setChoiceTargetCardId('');
+      setChoiceActorCardId('');
+      return;
+    }
+
+    const opponentWithCards = opponents.find((player) => (stealableByPlayer.get(player.id) || []).length > 0);
+    const nextTargetId = opponentWithCards?.id || opponents[0]?.id || '';
+    setChoiceTargetId(nextTargetId);
+
+    const targetOptions = stealableByPlayer.get(nextTargetId) || [];
+    setChoiceTargetCardId(targetOptions[0]?.card.id || '');
+
+    const myOptions = stealableByPlayer.get(myId) || [];
+    setChoiceActorCardId(myOptions[0]?.card.id || '');
+  }, [pendingActionChoice?.id, pendingActionChoice?.actorId, myId, opponents, stealableByPlayer]);
+
+  useEffect(() => {
+    const options = stealableByPlayer.get(choiceTargetId) || [];
+    if (!options.some((entry) => entry.card.id === choiceTargetCardId)) {
+      setChoiceTargetCardId(options[0]?.card.id || '');
+    }
+  }, [choiceTargetId, choiceTargetCardId, stealableByPlayer]);
 
   const selectedPaymentTotal = useMemo(() => {
     const idSet = new Set(selectedPaymentIds);
@@ -305,6 +411,43 @@ export default function GameBoard() {
       message: `Select at least $${pendingPayment.amountDue}M`,
     };
   }, [pendingPayment, paymentTurnForMe, myTableTotal, selectedPaymentTotal]);
+
+  const discardSelectionState = useMemo(() => {
+    if (!pendingDiscard || !discardTurnForMe) {
+      return { valid: false, message: '' };
+    }
+
+    return {
+      valid: selectedDiscardIds.length === pendingDiscard.count,
+      message: `Select exactly ${pendingDiscard.count} card${pendingDiscard.count === 1 ? '' : 's'} to discard`,
+    };
+  }, [pendingDiscard, discardTurnForMe, selectedDiscardIds.length]);
+
+  const myStealable = useMemo(
+    () => stealableByPlayer.get(myId) || [],
+    [stealableByPlayer, myId],
+  );
+
+  const choiceTargetCards = useMemo(
+    () => stealableByPlayer.get(choiceTargetId) || [],
+    [stealableByPlayer, choiceTargetId],
+  );
+
+  const undoableCardIds = useMemo(
+    () => new Set(gameState?.turnUndoableCardIds || []),
+    [gameState?.turnUndoableCardIds],
+  );
+
+  const canTakeBackCards = Boolean(
+    gameState?.started &&
+      isMyTurn &&
+      !hasWinner &&
+      !pendingTurnDraw &&
+      !pendingReaction &&
+      !pendingPayment &&
+      !pendingDiscard &&
+      !pendingActionChoice,
+  );
 
   function emit(event: string, payload?: Record<string, unknown>) {
     if (!socketRef.current) return;
@@ -370,12 +513,128 @@ export default function GameBoard() {
     );
   }
 
+  function toggleDiscardCard(cardId: string) {
+    setSelectedDiscardIds((previous) =>
+      previous.includes(cardId) ? previous.filter((id) => id !== cardId) : [...previous, cardId],
+    );
+  }
+
   function submitPayment() {
     if (!pendingPayment) return;
     emit('game:submit_payment', {
       paymentId: pendingPayment.id,
       cardIds: selectedPaymentIds,
     });
+  }
+
+  function submitDiscard() {
+    emit('game:discard_cards', {
+      cardIds: selectedDiscardIds,
+    });
+  }
+
+  function submitActionChoice() {
+    if (!pendingActionChoice) return;
+
+    emit('game:resolve_action_choice', {
+      choiceId: pendingActionChoice.id,
+      targetPlayerId: choiceTargetId,
+      targetCardId: choiceTargetCardId,
+      actorCardId: choiceActorCardId,
+    });
+  }
+
+  function isStealableCard(playerId: string, cardId: string): boolean {
+    return (stealableByPlayer.get(playerId) || []).some((entry) => entry.card.id === cardId);
+  }
+
+  function handleTableCardClick(
+    ownerId: string,
+    card: CardData,
+    zone: 'bank' | 'property',
+    color?: string,
+  ) {
+    if (paymentTurnForMe && ownerId === myId) {
+      togglePaymentCard(card.id);
+      return;
+    }
+
+    if (actionChoiceTurnForMe && pendingActionChoice) {
+      if (pendingActionChoice.actionType === 'sly_deal') {
+        if (ownerId !== myId && isStealableCard(ownerId, card.id)) {
+          setChoiceTargetId(ownerId);
+          setChoiceTargetCardId(card.id);
+        }
+        return;
+      }
+
+      if (pendingActionChoice.actionType === 'forced_deal') {
+        if (ownerId !== myId && isStealableCard(ownerId, card.id)) {
+          setChoiceTargetId(ownerId);
+          setChoiceTargetCardId(card.id);
+          return;
+        }
+
+        if (ownerId === myId && isStealableCard(ownerId, card.id)) {
+          setChoiceActorCardId(card.id);
+        }
+      }
+      return;
+    }
+
+    if (canTakeBackCards && ownerId === myId && undoableCardIds.has(card.id)) {
+      emit('game:take_back_card', { cardId: card.id, zone, color });
+    }
+  }
+
+  function isTableCardInteractive(ownerId: string, cardId: string): boolean {
+    if (paymentTurnForMe && ownerId === myId) {
+      return true;
+    }
+
+    if (actionChoiceTurnForMe && pendingActionChoice) {
+      if (ownerId !== myId && isStealableCard(ownerId, cardId)) {
+        return true;
+      }
+      if (
+        pendingActionChoice.actionType === 'forced_deal' &&
+        ownerId === myId &&
+        isStealableCard(ownerId, cardId)
+      ) {
+        return true;
+      }
+    }
+
+    if (canTakeBackCards && ownerId === myId && undoableCardIds.has(cardId)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function isTableCardSelected(ownerId: string, cardId: string): boolean {
+    if (paymentTurnForMe && ownerId === myId && selectedPaymentIds.includes(cardId)) {
+      return true;
+    }
+
+    if (actionChoiceTurnForMe && pendingActionChoice) {
+      if (ownerId !== myId && choiceTargetId === ownerId && choiceTargetCardId === cardId) {
+        return true;
+      }
+      if (
+        pendingActionChoice.actionType === 'forced_deal' &&
+        ownerId === myId &&
+        choiceActorCardId === cardId
+      ) {
+        return true;
+      }
+    }
+
+    if (canTakeBackCards && ownerId === myId && undoableCardIds.has(cardId)) {
+      return true;
+    }
+
+    return false;
   }
 
   return (
@@ -469,6 +728,12 @@ export default function GameBoard() {
 
           {gameState?.lastEvent ? <p className="mt-3 text-sm text-emerald-50">{gameState.lastEvent}</p> : null}
 
+          {canTakeBackCards && undoableCardIds.size > 0 ? (
+            <p className="mt-1 text-xs text-amber-100">
+              Click highlighted cards on your bank/property to take them back before ending your turn.
+            </p>
+          ) : null}
+
           {error ? <p className="mt-2 rounded-lg bg-rose-500/25 px-3 py-2 text-sm text-rose-100">{error}</p> : null}
 
           {pendingReaction && pendingReaction.targetPlayerIds.includes(myId) ? (
@@ -497,9 +762,85 @@ export default function GameBoard() {
               </p>
               <p className="mt-1 text-xs text-cyan-100">
                 {paymentTurnForMe
-                  ? 'Your turn to select payment cards from your table.'
+                  ? 'Click your bank/property cards directly on the board to select payment.'
                   : `Waiting for ${playerNameById.get(pendingPayment.currentPayerId || '') || 'player'} to submit payment.`}
               </p>
+              {paymentTurnForMe ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-cyan-100">
+                    Selected ${selectedPaymentTotal}M
+                  </span>
+                  <button
+                    type="button"
+                    onClick={submitPayment}
+                    disabled={!paymentSelectionState.valid}
+                    className="rounded bg-cyan-300 px-2 py-1 text-[11px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                  >
+                    Submit Payment
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {pendingActionChoice ? (
+            <div className="mt-3 rounded-lg border border-violet-300/50 bg-violet-100/15 px-3 py-2 text-sm">
+              <p>
+                Pending choice: {pendingActionChoice.actionType.replace('_', ' ')} | Player:{' '}
+                <span className="font-bold">{playerNameById.get(pendingActionChoice.actorId) || 'N/A'}</span>
+              </p>
+              {actionChoiceTurnForMe ? (
+                <div className="mt-2 flex items-center gap-2 text-xs text-violet-100">
+                  <span>Click opponent bank/property cards on the board to choose.</span>
+                  <span>
+                    Target: {playerNameById.get(choiceTargetId) || '-'} / Card:{' '}
+                    {choiceTargetCards.find((entry) => entry.card.id === choiceTargetCardId)?.card.name || '-'}
+                  </span>
+                  {pendingActionChoice.actionType === 'forced_deal' ? (
+                    <span>
+                      Your card (click your own bank/property):{' '}
+                      {myStealable.find((entry) => entry.card.id === choiceActorCardId)?.card.name || '-'}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={submitActionChoice}
+                    disabled={
+                      !choiceTargetId ||
+                      !choiceTargetCardId ||
+                      (pendingActionChoice.actionType === 'forced_deal' && !choiceActorCardId)
+                    }
+                    className="rounded bg-violet-300 px-2 py-1 text-[11px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {pendingDiscard ? (
+            <div className="mt-3 rounded-lg border border-yellow-300/50 bg-yellow-100/15 px-3 py-2 text-sm">
+              <p>
+                Pending discard: <span className="font-bold">{playerNameById.get(pendingDiscard.playerId) || 'Player'}</span>{' '}
+                must discard <span className="font-bold">{pendingDiscard.count}</span> cards
+              </p>
+              {discardTurnForMe ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-yellow-100">Click cards in your hand to pick discards.</span>
+                  <span className="text-xs text-yellow-100">
+                    Selected {selectedDiscardIds.length}/{pendingDiscard.count}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={submitDiscard}
+                    disabled={!discardSelectionState.valid}
+                    className="rounded bg-yellow-300 px-2 py-1 text-[11px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                  >
+                    Submit Discard
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -592,7 +933,16 @@ export default function GameBoard() {
                                   className={idx === 0 ? '' : player.id === myId ? '-ml-16' : '-ml-24'}
                                   style={{ zIndex: idx + 1 }}
                                 >
-                                  <Card card={card} compact={player.id === myId} />
+                                  <Card
+                                    card={card}
+                                    compact={player.id === myId}
+                                    onCardClick={
+                                      isTableCardInteractive(player.id, card.id)
+                                        ? () => handleTableCardClick(player.id, card, 'bank')
+                                        : undefined
+                                    }
+                                    selected={isTableCardSelected(player.id, card.id)}
+                                  />
                                 </div>
                               ))}
                               {stack.length > 1 ? (
@@ -643,6 +993,12 @@ export default function GameBoard() {
                                               ? (nextColor) => moveWildcard(card.id, nextColor)
                                               : undefined
                                           }
+                                          onCardClick={
+                                            isTableCardInteractive(player.id, card.id)
+                                              ? () => handleTableCardClick(player.id, card, 'property', color)
+                                              : undefined
+                                          }
+                                          selected={isTableCardSelected(player.id, card.id)}
                                         />
                                       </div>
                                     ))}
@@ -739,110 +1095,50 @@ export default function GameBoard() {
                   <Card
                     key={card.id}
                     card={card}
+                    selected={discardTurnForMe && selectedDiscardIds.includes(card.id)}
+                    onCardClick={discardTurnForMe ? () => toggleDiscardCard(card.id) : undefined}
                     actions={
-                      <>
-                        {showProperty ? (
-                          <button
-                            type="button"
-                            disabled={!canPlayCards}
-                            onClick={() => playCard(card, 'property')}
-                            className="rounded bg-emerald-500 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                          >
-                            To Property
-                          </button>
-                        ) : null}
+                      discardTurnForMe ? null : (
+                        <>
+                          {showProperty ? (
+                            <button
+                              type="button"
+                              disabled={!canPlayCards}
+                              onClick={() => playCard(card, 'property')}
+                              className="rounded bg-emerald-500 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                            >
+                              To Property
+                            </button>
+                          ) : null}
 
-                        {showBank ? (
-                          <button
-                            type="button"
-                            disabled={!canPlayCards}
-                            onClick={() => playCard(card, 'bank')}
-                            className="rounded bg-zinc-200 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                          >
-                            To Bank
-                          </button>
-                        ) : null}
+                          {showBank ? (
+                            <button
+                              type="button"
+                              disabled={!canPlayCards}
+                              onClick={() => playCard(card, 'bank')}
+                              className="rounded bg-zinc-200 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                            >
+                              To Bank
+                            </button>
+                          ) : null}
 
-                        {canCardUseAction(card) ? (
-                          <button
-                            type="button"
-                            disabled={!canPlayCards}
-                            onClick={() => playCard(card, 'action')}
-                            className="rounded bg-sky-400 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                          >
-                            Play Action
-                          </button>
-                        ) : null}
-                      </>
+                          {canCardUseAction(card) ? (
+                            <button
+                              type="button"
+                              disabled={!canPlayCards}
+                              onClick={() => playCard(card, 'action')}
+                              className="rounded bg-sky-400 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                            >
+                              Play Action
+                            </button>
+                          ) : null}
+                        </>
+                      )
                     }
                   />
                 );
               })}
             </div>
-          </section>
-        ) : null}
-
-        {pendingPayment && paymentTurnForMe ? (
-          <section className="rounded-2xl border border-yellow-300/60 bg-yellow-100/15 p-4 shadow-xl backdrop-blur">
-            <h3 className="text-base font-black text-yellow-100">Choose Exact Payment Cards</h3>
-            <p className="mt-1 text-sm text-yellow-50">
-              Pay exactly from your table. You can use bank cards, properties, or both.
-            </p>
-            <p className="mt-1 text-sm text-yellow-50">
-              Due: <span className="font-black">${pendingPayment.amountDue}M</span> | Selected:{' '}
-              <span className="font-black">${selectedPaymentTotal}M</span>
-            </p>
-            <p
-              className={`mt-1 text-xs ${
-                paymentSelectionState.valid ? 'text-emerald-200' : 'text-yellow-100'
-              }`}
-            >
-              {paymentSelectionState.message}
-            </p>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {myTableCards.map((entry) => (
-                <div key={entry.card.id} className="space-y-1">
-                  <Card
-                    card={entry.card}
-                    compact
-                    setColor={entry.zone === 'property' ? entry.color : undefined}
-                    setCards={
-                      entry.zone === 'property' && entry.color && me
-                        ? me.properties[entry.color]
-                        : undefined
-                    }
-                    onCardClick={() => togglePaymentCard(entry.card.id)}
-                    selected={selectedPaymentIds.includes(entry.card.id)}
-                    actions={
-                      <button
-                        type="button"
-                        onClick={() => togglePaymentCard(entry.card.id)}
-                        className={`rounded px-2 py-1 text-[10px] font-black ${
-                          selectedPaymentIds.includes(entry.card.id)
-                            ? 'bg-amber-400 text-zinc-900'
-                            : 'bg-white/90 text-zinc-900'
-                        }`}
-                      >
-                        {selectedPaymentIds.includes(entry.card.id) ? 'Selected' : 'Use for Payment'}
-                      </button>
-                    }
-                  />
-                  <p className="text-center text-[10px] uppercase tracking-wide text-yellow-100/80">
-                    {entry.zone === 'bank' ? 'Bank' : `Property: ${colorLabel(entry.color || 'brown')}`}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={submitPayment}
-              disabled={!paymentSelectionState.valid}
-              className="mt-3 rounded bg-yellow-400 px-3 py-2 text-xs font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-400"
-            >
-              Submit Payment
-            </button>
           </section>
         ) : null}
       </div>

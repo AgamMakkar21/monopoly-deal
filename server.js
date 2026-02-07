@@ -98,6 +98,10 @@ function createRoom(roomId, hostSocketId, hostName) {
     pendingTurnDraw: null,
     pendingReaction: null,
     pendingPayment: null,
+    pendingDiscard: null,
+    pendingActionChoice: null,
+    turnAdvanceRequestedBy: null,
+    turnUndoableCardIds: [],
     turnEffects: {},
     winnerId: null,
     lastEvent: 'Room created',
@@ -202,6 +206,16 @@ function removeCardFromTable(player, cardId) {
   return null;
 }
 
+function clearCardPlacementForHand(card) {
+  if (!card) {
+    return;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(card, 'assignedColor')) {
+    delete card.assignedColor;
+  }
+}
+
 function tableCards(player) {
   return [
     ...player.bank.map((card) => ({
@@ -299,23 +313,7 @@ function applySelectedPayment(payer, receiver, amount, selectedCardIds) {
   }
 
   for (const card of transferred) {
-    if (card.category === 'property') {
-      const color = card.assignedColor || card.colors?.[0];
-      addPropertyCard(receiver, card, color);
-      continue;
-    }
-
-    if (card.category === 'wildcard') {
-      const color =
-        card.assignedColor ||
-        (card.colors?.[0] && card.colors[0] !== 'any' ? card.colors[0] : null);
-      if (color) {
-        addPropertyCard(receiver, card, color);
-        continue;
-      }
-    }
-
-    receiver.bank.push(card);
+    placeCardOnTable(receiver, card);
   }
 
   return {
@@ -337,6 +335,30 @@ function getCardDisplayColor(card) {
   }
 
   return null;
+}
+
+function placeCardOnTable(player, card, fallbackColor = null) {
+  if (!card) {
+    return;
+  }
+
+  if (card.category === 'property') {
+    const color = card.assignedColor || card.colors?.[0] || fallbackColor || PROPERTY_COLORS[0];
+    addPropertyCard(player, card, color);
+    return;
+  }
+
+  if (card.category === 'wildcard') {
+    const color =
+      card.assignedColor ||
+      (card.colors?.[0] && card.colors[0] !== 'any' ? card.colors[0] : null) ||
+      fallbackColor ||
+      'brown';
+    addPropertyCard(player, card, color);
+    return;
+  }
+
+  player.bank.push(card);
 }
 
 function addPropertyCard(player, card, color) {
@@ -378,6 +400,14 @@ function calculateRent(cards, color) {
 function getStealableCards(player) {
   const result = [];
 
+  for (const card of player.bank) {
+    result.push({
+      zone: 'bank',
+      color: null,
+      card,
+    });
+  }
+
   for (const [color, cards] of Object.entries(player.properties)) {
     if (isFullSet(cards, color)) {
       continue;
@@ -387,7 +417,11 @@ function getStealableCards(player) {
       if (card.actionType === 'house' || card.actionType === 'hotel') {
         continue;
       }
-      result.push({ color, card });
+      result.push({
+        zone: 'property',
+        color,
+        card,
+      });
     }
   }
 
@@ -401,6 +435,10 @@ function startTurn(room) {
   }
 
   room.cardsPlayedThisTurn = 0;
+  room.pendingDiscard = null;
+  room.turnAdvanceRequestedBy = null;
+  room.pendingActionChoice = null;
+  room.turnUndoableCardIds = [];
   room.turnEffects[player.id] = {
     rentMultiplier: 1,
   };
@@ -423,6 +461,9 @@ function checkWinner(room) {
   room.started = false;
   room.pendingTurnDraw = null;
   room.pendingPayment = null;
+  room.pendingDiscard = null;
+  room.pendingActionChoice = null;
+  room.turnAdvanceRequestedBy = null;
 
   if (room.pendingReaction?.timer) {
     clearTimeout(room.pendingReaction.timer);
@@ -480,6 +521,29 @@ function safePendingPayment(pending) {
   };
 }
 
+function safePendingDiscard(pending) {
+  if (!pending) {
+    return null;
+  }
+
+  return {
+    playerId: pending.playerId,
+    count: pending.count,
+  };
+}
+
+function safePendingActionChoice(pending) {
+  if (!pending) {
+    return null;
+  }
+
+  return {
+    id: pending.id,
+    actorId: pending.actorId,
+    actionType: pending.actionType,
+  };
+}
+
 function serializePlayerView(room, viewerId) {
   return {
     roomId: room.id,
@@ -492,6 +556,10 @@ function serializePlayerView(room, viewerId) {
     pendingTurnDraw: room.pendingTurnDraw,
     pendingReaction: safePendingReaction(room.pendingReaction),
     pendingPayment: safePendingPayment(room.pendingPayment),
+    pendingDiscard: safePendingDiscard(room.pendingDiscard),
+    pendingActionChoice: safePendingActionChoice(room.pendingActionChoice),
+    turnUndoableCardIds:
+      getCurrentPlayer(room)?.id === viewerId ? room.turnUndoableCardIds : [],
     winnerId: room.winnerId,
     lastEvent: room.lastEvent,
     players: room.players.map((player) => ({
@@ -507,7 +575,82 @@ function serializePlayerView(room, viewerId) {
   };
 }
 
+function requestTurnEnd(room, playerId, reason) {
+  const currentPlayer = getCurrentPlayer(room);
+  if (!currentPlayer || currentPlayer.id !== playerId) {
+    return false;
+  }
+
+  if (room.pendingTurnDraw?.playerId === playerId) {
+    return false;
+  }
+
+  room.turnAdvanceRequestedBy = playerId;
+
+  const discardCount = Math.max(0, currentPlayer.hand.length - 7);
+  if (discardCount > 0) {
+    room.pendingDiscard = {
+      playerId,
+      count: discardCount,
+    };
+
+    room.lastEvent = `${currentPlayer.name} must discard ${discardCount} card${
+      discardCount === 1 ? '' : 's'
+    } before ending turn`;
+    return false;
+  }
+
+  room.pendingDiscard = null;
+  room.turnAdvanceRequestedBy = null;
+
+  nextPlayerIndex(room);
+  startTurn(room);
+
+  if (reason === 'auto') {
+    room.lastEvent = `${currentPlayer.name} played 3 cards. Turn auto-ended. ${room.lastEvent}`;
+  }
+
+  return true;
+}
+
+function markUndoableCard(room, cardId) {
+  if (!cardId) {
+    return;
+  }
+
+  if (!room.turnUndoableCardIds.includes(cardId)) {
+    room.turnUndoableCardIds.push(cardId);
+  }
+}
+
+function unmarkUndoableCard(room, cardId) {
+  room.turnUndoableCardIds = room.turnUndoableCardIds.filter((id) => id !== cardId);
+}
+
+function maybeAutoEndTurn(room) {
+  if (!room.started || room.winnerId) {
+    return;
+  }
+
+  if (room.pendingTurnDraw || room.pendingReaction || room.pendingPayment || room.pendingDiscard || room.pendingActionChoice) {
+    return;
+  }
+
+  const currentPlayer = getCurrentPlayer(room);
+  if (!currentPlayer) {
+    return;
+  }
+
+  if (room.cardsPlayedThisTurn < MAX_CARDS_PER_TURN) {
+    return;
+  }
+
+  requestTurnEnd(room, currentPlayer.id, 'auto');
+}
+
 function emitState(room) {
+  maybeAutoEndTurn(room);
+
   for (const player of room.players) {
     io.to(player.id).emit('state:update', serializePlayerView(room, player.id));
   }
@@ -615,7 +758,7 @@ function resolvePendingReaction(roomId, pendingId, canceledByPlayerId) {
   }
 
   applyResolvedAction(room, pending.payload);
-  if (!room.pendingPayment) {
+  if (!room.pendingPayment && !room.pendingActionChoice) {
     checkWinner(room);
   }
   emitState(room);
@@ -702,62 +845,41 @@ function applyResolvedAction(room, payload) {
   }
 
   if (payload.type === 'sly_deal') {
-    const target = getPlayer(room, payload.targetPlayerId);
-    if (!target) {
+    const hasAnyStealable = room.players
+      .filter((entry) => entry.id !== actor.id)
+      .some((entry) => getStealableCards(entry).length > 0);
+
+    if (!hasAnyStealable) {
+      room.lastEvent = `${actor.name} played Sly Deal, but no stealable properties are available`;
       return;
     }
 
-    const stealable = getStealableCards(target);
-    const picked = stealable.find((entry) => entry.card.id === payload.targetCardId) || stealable[0];
-    if (!picked) {
-      room.lastEvent = `${actor.name} played Sly Deal, but no eligible property was available`;
-      return;
-    }
-
-    const stolen = removeCardById(target.properties[picked.color], picked.card.id);
-    if (!stolen) {
-      return;
-    }
-
-    const destinationColor = getCardDisplayColor(stolen) || picked.color;
-    addPropertyCard(actor, stolen, destinationColor);
-
-    room.lastEvent = `${actor.name} stole a property from ${target.name}`;
+    room.pendingActionChoice = {
+      id: `choice-${Date.now()}-${Math.random()}`,
+      actorId: actor.id,
+      actionType: 'sly_deal',
+    };
+    room.lastEvent = `${actor.name} must choose a target and property for Sly Deal`;
     return;
   }
 
   if (payload.type === 'forced_deal') {
-    const target = getPlayer(room, payload.targetPlayerId);
-    if (!target) {
+    const actorStealable = getStealableCards(actor);
+    const targetStealable = room.players
+      .filter((entry) => entry.id !== actor.id)
+      .some((entry) => getStealableCards(entry).length > 0);
+
+    if (actorStealable.length === 0 || !targetStealable) {
+      room.lastEvent = `${actor.name} played Forced Deal, but no valid swap is available`;
       return;
     }
 
-    const actorOptions = getStealableCards(actor);
-    const targetOptions = getStealableCards(target);
-
-    const actorPick = actorOptions.find((entry) => entry.card.id === payload.actorCardId) || actorOptions[0];
-    const targetPick =
-      targetOptions.find((entry) => entry.card.id === payload.targetCardId) || targetOptions[0];
-
-    if (!actorPick || !targetPick) {
-      room.lastEvent = `${actor.name} played Forced Deal, but no valid swap was available`;
-      return;
-    }
-
-    const actorCard = removeCardById(actor.properties[actorPick.color], actorPick.card.id);
-    const targetCard = removeCardById(target.properties[targetPick.color], targetPick.card.id);
-
-    if (!actorCard || !targetCard) {
-      return;
-    }
-
-    const actorToColor = getCardDisplayColor(targetCard) || targetPick.color;
-    const targetToColor = getCardDisplayColor(actorCard) || actorPick.color;
-
-    addPropertyCard(actor, targetCard, actorToColor);
-    addPropertyCard(target, actorCard, targetToColor);
-
-    room.lastEvent = `${actor.name} swapped properties with ${target.name}`;
+    room.pendingActionChoice = {
+      id: `choice-${Date.now()}-${Math.random()}`,
+      actorId: actor.id,
+      actionType: 'forced_deal',
+    };
+    room.lastEvent = `${actor.name} must choose target properties for Forced Deal`;
     return;
   }
 
@@ -804,6 +926,16 @@ function playCard(socket, payload) {
     return;
   }
 
+  if (room.pendingDiscard) {
+    emitError(socket, 'Waiting for required discard selection.');
+    return;
+  }
+
+  if (room.pendingActionChoice) {
+    emitError(socket, 'Waiting for action card choice resolution.');
+    return;
+  }
+
   const player = getPlayer(room, socket.id);
   const currentPlayer = getCurrentPlayer(room);
 
@@ -832,6 +964,7 @@ function playCard(socket, payload) {
 
   if (mode === 'bank') {
     player.bank.push(handCard);
+    markUndoableCard(room, handCard.id);
     room.cardsPlayedThisTurn += 1;
     room.lastEvent = `${player.name} banked ${handCard.name}`;
     checkWinner(room);
@@ -843,6 +976,7 @@ function playCard(socket, payload) {
     if (handCard.category === 'property') {
       const color = handCard.colors?.[0];
       addPropertyCard(player, handCard, color);
+      markUndoableCard(room, handCard.id);
       room.cardsPlayedThisTurn += 1;
       room.lastEvent = `${player.name} played a property`;
       checkWinner(room);
@@ -863,6 +997,7 @@ function playCard(socket, payload) {
       }
 
       addPropertyCard(player, handCard, chosenColor);
+      markUndoableCard(room, handCard.id);
       room.cardsPlayedThisTurn += 1;
       room.lastEvent = `${player.name} played wildcard as ${chosenColor}`;
       checkWinner(room);
@@ -893,6 +1028,7 @@ function playCard(socket, payload) {
       }
 
       addPropertyCard(player, handCard, color);
+      markUndoableCard(room, handCard.id);
       room.cardsPlayedThisTurn += 1;
       room.lastEvent = `${player.name} attached ${handCard.name} to ${color}`;
       checkWinner(room);
@@ -919,7 +1055,7 @@ function playCard(socket, payload) {
     }
 
     if (
-      ['debt_collector', 'sly_deal', 'forced_deal', 'deal_breaker'].includes(
+      ['debt_collector', 'deal_breaker'].includes(
         handCard.actionType,
       ) &&
       (!payload.targetPlayerId || payload.targetPlayerId === player.id)
@@ -996,18 +1132,17 @@ function playCard(socket, payload) {
     }
 
     if (handCard.actionType === 'sly_deal') {
+      const targets = room.players.map((entry) => entry.id).filter((id) => id !== player.id);
       const reactionPayload = {
         type: 'sly_deal',
         actorId: player.id,
-        targetPlayerId: payload.targetPlayerId,
-        targetCardId: payload.targetCardId || null,
       };
 
       const pendingId = `${Date.now()}-${Math.random()}`;
       queuePendingReaction(room, {
         id: pendingId,
         sourcePlayerId: player.id,
-        targetPlayerIds: [payload.targetPlayerId],
+        targetPlayerIds: targets,
         actionType: handCard.actionType,
         payload: reactionPayload,
         expiresAt: Date.now() + REACTION_WINDOW_MS,
@@ -1019,19 +1154,17 @@ function playCard(socket, payload) {
     }
 
     if (handCard.actionType === 'forced_deal') {
+      const targets = room.players.map((entry) => entry.id).filter((id) => id !== player.id);
       const reactionPayload = {
         type: 'forced_deal',
         actorId: player.id,
-        targetPlayerId: payload.targetPlayerId,
-        actorCardId: payload.actorCardId || null,
-        targetCardId: payload.targetCardId || null,
       };
 
       const pendingId = `${Date.now()}-${Math.random()}`;
       queuePendingReaction(room, {
         id: pendingId,
         sourcePlayerId: player.id,
-        targetPlayerIds: [payload.targetPlayerId],
+        targetPlayerIds: targets,
         actionType: handCard.actionType,
         payload: reactionPayload,
         expiresAt: Date.now() + REACTION_WINDOW_MS,
@@ -1148,6 +1281,11 @@ function drawTurnCards(socket) {
     return;
   }
 
+  if (room.pendingDiscard || room.pendingActionChoice) {
+    emitError(socket, 'Cannot draw while turn resolution is pending.');
+    return;
+  }
+
   const currentPlayer = getCurrentPlayer(room);
   if (!currentPlayer || currentPlayer.id !== socket.id) {
     emitError(socket, 'It is not your turn.');
@@ -1221,6 +1359,164 @@ function submitPendingPayment(socket, payload) {
   emitState(room);
 }
 
+function takeBackPlayedCard(socket, payload) {
+  const room = getRoomByPlayer(socket);
+  if (!room || !room.started || room.winnerId) {
+    emitError(socket, 'Game is not active.');
+    return;
+  }
+
+  if (room.pendingReaction || room.pendingPayment || room.pendingDiscard || room.pendingActionChoice) {
+    emitError(socket, 'Cannot take back cards while resolution is pending.');
+    return;
+  }
+
+  const currentPlayer = getCurrentPlayer(room);
+  if (!currentPlayer || currentPlayer.id !== socket.id) {
+    emitError(socket, 'It is not your turn.');
+    return;
+  }
+
+  if (room.pendingTurnDraw?.playerId === socket.id) {
+    emitError(socket, 'Draw turn cards first.');
+    return;
+  }
+
+  const cardId = String(payload.cardId || '');
+  if (!room.turnUndoableCardIds.includes(cardId)) {
+    emitError(socket, 'That card cannot be taken back.');
+    return;
+  }
+
+  const removed = removeCardFromTable(currentPlayer, cardId);
+  if (!removed) {
+    unmarkUndoableCard(room, cardId);
+    emitError(socket, 'Card not found on your table.');
+    return;
+  }
+
+  clearCardPlacementForHand(removed);
+  currentPlayer.hand.push(removed);
+  unmarkUndoableCard(room, cardId);
+  room.cardsPlayedThisTurn = Math.max(0, room.cardsPlayedThisTurn - 1);
+  room.lastEvent = `${currentPlayer.name} took back ${removed.name}`;
+  emitState(room);
+}
+
+function resolvePendingActionChoice(socket, payload) {
+  const room = getRoomByPlayer(socket);
+  if (!room || !room.started || room.winnerId) {
+    emitError(socket, 'Game is not active.');
+    return;
+  }
+
+  const pending = room.pendingActionChoice;
+  if (!pending) {
+    emitError(socket, 'No action choice is pending.');
+    return;
+  }
+
+  if (payload.choiceId && pending.id !== payload.choiceId) {
+    emitError(socket, 'Action choice reference is out of date.');
+    return;
+  }
+
+  if (pending.actorId !== socket.id) {
+    emitError(socket, 'Only the action player can resolve this choice.');
+    return;
+  }
+
+  const actor = getPlayer(room, pending.actorId);
+  if (!actor) {
+    room.pendingActionChoice = null;
+    emitState(room);
+    return;
+  }
+
+  if (pending.actionType === 'sly_deal') {
+    const target = getPlayer(room, payload.targetPlayerId);
+    if (!target || target.id === actor.id) {
+      emitError(socket, 'Choose a valid opponent target.');
+      return;
+    }
+
+    const stealable = getStealableCards(target);
+    const picked = stealable.find((entry) => entry.card.id === payload.targetCardId);
+    if (!picked) {
+      emitError(socket, 'Choose a valid target card for Sly Deal.');
+      return;
+    }
+
+    let stolen = null;
+    if (picked.zone === 'bank') {
+      stolen = removeCardById(target.bank, picked.card.id);
+    } else {
+      stolen = removeCardById(target.properties[picked.color], picked.card.id);
+    }
+    if (!stolen) {
+      emitError(socket, 'Could not transfer selected card.');
+      return;
+    }
+
+    placeCardOnTable(actor, stolen, picked.color || null);
+
+    room.pendingActionChoice = null;
+    room.lastEvent = `${actor.name} stole ${stolen.name} from ${target.name}`;
+    checkWinner(room);
+    emitState(room);
+    return;
+  }
+
+  if (pending.actionType === 'forced_deal') {
+    const target = getPlayer(room, payload.targetPlayerId);
+    if (!target || target.id === actor.id) {
+      emitError(socket, 'Choose a valid opponent target.');
+      return;
+    }
+
+    const actorOptions = getStealableCards(actor);
+    const targetOptions = getStealableCards(target);
+
+    const actorPick = actorOptions.find((entry) => entry.card.id === payload.actorCardId);
+    const targetPick = targetOptions.find((entry) => entry.card.id === payload.targetCardId);
+
+    if (!actorPick || !targetPick) {
+      emitError(socket, 'Choose valid cards for Forced Deal.');
+      return;
+    }
+
+    let actorCard = null;
+    if (actorPick.zone === 'bank') {
+      actorCard = removeCardById(actor.bank, actorPick.card.id);
+    } else {
+      actorCard = removeCardById(actor.properties[actorPick.color], actorPick.card.id);
+    }
+
+    let targetCard = null;
+    if (targetPick.zone === 'bank') {
+      targetCard = removeCardById(target.bank, targetPick.card.id);
+    } else {
+      targetCard = removeCardById(target.properties[targetPick.color], targetPick.card.id);
+    }
+
+    if (!actorCard || !targetCard) {
+      emitError(socket, 'Could not swap selected cards.');
+      return;
+    }
+
+    placeCardOnTable(actor, targetCard, targetPick.color || null);
+    placeCardOnTable(target, actorCard, actorPick.color || null);
+
+    room.pendingActionChoice = null;
+    room.lastEvent = `${actor.name} swapped ${actorCard.name} with ${targetCard.name}`;
+    checkWinner(room);
+    emitState(room);
+    return;
+  }
+
+  emitError(socket, 'Unknown action choice type.');
+}
+
 function moveWildcard(socket, payload) {
   const room = getRoomByPlayer(socket);
   if (!room || !room.started) {
@@ -1228,7 +1524,7 @@ function moveWildcard(socket, payload) {
     return;
   }
 
-  if (room.pendingReaction || room.pendingPayment) {
+  if (room.pendingReaction || room.pendingPayment || room.pendingDiscard || room.pendingActionChoice) {
     emitError(socket, 'Cannot move wildcard while action resolution is pending.');
     return;
   }
@@ -1287,6 +1583,16 @@ function endTurn(socket) {
     return;
   }
 
+  if (room.pendingActionChoice) {
+    emitError(socket, 'Resolve pending action card choice first.');
+    return;
+  }
+
+  if (room.pendingDiscard) {
+    emitError(socket, 'Choose cards to discard first.');
+    return;
+  }
+
   const currentPlayer = getCurrentPlayer(room);
   if (!currentPlayer || currentPlayer.id !== socket.id) {
     emitError(socket, 'It is not your turn.');
@@ -1298,15 +1604,62 @@ function endTurn(socket) {
     return;
   }
 
-  while (currentPlayer.hand.length > 7) {
-    const discarded = currentPlayer.hand.pop();
-    if (discarded) {
-      room.discard.push(discarded);
-    }
+  requestTurnEnd(room, socket.id, 'manual');
+  emitState(room);
+}
+
+function submitDiscardCards(socket, payload) {
+  const room = getRoomByPlayer(socket);
+  if (!room || !room.started || room.winnerId) {
+    emitError(socket, 'Game is not active.');
+    return;
   }
 
-  nextPlayerIndex(room);
-  startTurn(room);
+  const pending = room.pendingDiscard;
+  if (!pending) {
+    emitError(socket, 'No discard is pending.');
+    return;
+  }
+
+  if (pending.playerId !== socket.id) {
+    emitError(socket, 'It is not your discard turn.');
+    return;
+  }
+
+  const player = getPlayer(room, socket.id);
+  if (!player) {
+    room.pendingDiscard = null;
+    emitState(room);
+    return;
+  }
+
+  const selectedIdsRaw = Array.isArray(payload.cardIds) ? payload.cardIds : [];
+  const selectedIds = [...new Set(selectedIdsRaw.map((id) => String(id)))];
+
+  if (selectedIds.length !== pending.count) {
+    emitError(socket, `Select exactly ${pending.count} cards to discard.`);
+    return;
+  }
+
+  const toDiscard = [];
+  for (const cardId of selectedIds) {
+    const index = player.hand.findIndex((card) => card.id === cardId);
+    if (index === -1) {
+      emitError(socket, 'Discard selection includes invalid cards.');
+      return;
+    }
+    const [card] = player.hand.splice(index, 1);
+    toDiscard.push(card);
+  }
+
+  room.discard.push(...toDiscard);
+  room.pendingDiscard = null;
+  room.lastEvent = `${player.name} discarded ${toDiscard.length} card${toDiscard.length === 1 ? '' : 's'}`;
+
+  if (room.turnAdvanceRequestedBy === socket.id) {
+    requestTurnEnd(room, socket.id, 'after_discard');
+  }
+
   emitState(room);
 }
 
@@ -1390,6 +1743,9 @@ io.on('connection', (socket) => {
     room.pendingTurnDraw = null;
     room.pendingReaction = null;
     room.pendingPayment = null;
+    room.pendingDiscard = null;
+    room.pendingActionChoice = null;
+    room.turnAdvanceRequestedBy = null;
     room.turnEffects = {};
 
     for (const player of room.players) {
@@ -1414,6 +1770,18 @@ io.on('connection', (socket) => {
 
   socket.on('game:submit_payment', (payload) => {
     submitPendingPayment(socket, payload || {});
+  });
+
+  socket.on('game:discard_cards', (payload) => {
+    submitDiscardCards(socket, payload || {});
+  });
+
+  socket.on('game:resolve_action_choice', (payload) => {
+    resolvePendingActionChoice(socket, payload || {});
+  });
+
+  socket.on('game:take_back_card', (payload) => {
+    takeBackPlayedCard(socket, payload || {});
   });
 
   socket.on('game:move_wildcard', (payload) => {
@@ -1478,6 +1846,20 @@ io.on('connection', (socket) => {
 
     if (room.pendingReaction?.targetPlayerIds.includes(removed.id)) {
       resolvePendingReaction(room.id, room.pendingReaction.id, null);
+    }
+
+    if (room.pendingDiscard?.playerId === removed.id) {
+      room.pendingDiscard = null;
+      room.turnAdvanceRequestedBy = null;
+    }
+
+    if (room.pendingActionChoice?.actorId === removed.id) {
+      room.pendingActionChoice = null;
+      room.lastEvent = `${removed.name} disconnected. Pending action choice was canceled.`;
+    }
+
+    if (room.turnAdvanceRequestedBy === removed.id) {
+      room.turnAdvanceRequestedBy = null;
     }
 
     if (room.pendingPayment) {
