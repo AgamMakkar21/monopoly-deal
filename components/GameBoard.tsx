@@ -94,6 +94,9 @@ type TableCardEntry = {
   color?: string;
 };
 
+type TableCardSize = 'regular' | 'compact' | 'tiny';
+type PlayMode = 'bank' | 'property' | 'action';
+
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4000';
 const PROPERTY_COLORS = [
   'brown',
@@ -145,6 +148,26 @@ function canCardUseAction(card: CardData): boolean {
   return card.actionType !== 'just_say_no' && card.actionType !== 'house' && card.actionType !== 'hotel';
 }
 
+function requiresActionSetup(card: CardData, mode: PlayMode): boolean {
+  if (mode !== 'action') {
+    return false;
+  }
+
+  if (card.category === 'rent') {
+    return true;
+  }
+
+  if (card.category !== 'action') {
+    return false;
+  }
+
+  return card.actionType === 'debt_collector' || card.actionType === 'deal_breaker';
+}
+
+function isAnyRentCard(card: CardData): boolean {
+  return card.category === 'rent' && card.rentColors?.[0] === 'any';
+}
+
 function isFullSet(cards: CardData[], color: string): boolean {
   const needed = SET_REQUIREMENTS[color] || Number.MAX_SAFE_INTEGER;
   return cards.length >= needed;
@@ -182,6 +205,59 @@ function bankStackKey(card: CardData): string {
   return `${card.category}-${card.name}`;
 }
 
+function splitCardsIntoRows(cards: CardData[], cardsPerRow: number): CardData[][] {
+  if (!cards.length) {
+    return [];
+  }
+
+  const bounded = Math.max(1, cardsPerRow);
+  const rows: CardData[][] = [];
+  for (let idx = 0; idx < cards.length; idx += bounded) {
+    rows.push(cards.slice(idx, idx + bounded));
+  }
+  return rows;
+}
+
+function tableCardSize(player: PlayerView, isSelf: boolean): TableCardSize {
+  const totalTableCards =
+    player.bank.length +
+    Object.values(player.properties).reduce((sum, cards) => sum + cards.length, 0);
+
+  if (totalTableCards >= 18) {
+    return 'tiny';
+  }
+
+  if (totalTableCards >= 12) {
+    return 'compact';
+  }
+
+  return isSelf ? 'compact' : 'regular';
+}
+
+function stackOverlapClass(size: TableCardSize): string {
+  if (size === 'tiny') {
+    return '-ml-10';
+  }
+
+  if (size === 'compact') {
+    return '-ml-14';
+  }
+
+  return '-ml-24';
+}
+
+function stackCardsPerRow(size: TableCardSize): number {
+  if (size === 'tiny') {
+    return 3;
+  }
+
+  if (size === 'compact') {
+    return 4;
+  }
+
+  return 5;
+}
+
 export default function GameBoard() {
   const socketRef = useRef<Socket | null>(null);
 
@@ -197,6 +273,7 @@ export default function GameBoard() {
   const [choiceTargetId, setChoiceTargetId] = useState('');
   const [choiceTargetCardId, setChoiceTargetCardId] = useState('');
   const [choiceActorCardId, setChoiceActorCardId] = useState('');
+  const [actionSetupHighlightUntil, setActionSetupHighlightUntil] = useState(0);
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
 
@@ -257,6 +334,13 @@ export default function GameBoard() {
     return map;
   }, [gameState]);
 
+  const tablePlayers = useMemo(() => {
+    if (!gameState) return [];
+    const mine = gameState.players.find((player) => player.id === myId);
+    const others = gameState.players.filter((player) => player.id !== myId);
+    return mine ? [...others, mine] : [...gameState.players];
+  }, [gameState, myId]);
+
   const pendingReaction = gameState?.pendingReaction || null;
   const pendingTurnDraw = gameState?.pendingTurnDraw || null;
   const pendingPayment = gameState?.pendingPayment || null;
@@ -273,6 +357,10 @@ export default function GameBoard() {
   const isMyTurn = gameState?.currentPlayerId === myId;
   const hasWinner = Boolean(gameState?.winnerId);
   const isHost = gameState?.hostId === myId;
+  const isWinner = Boolean(gameState?.winnerId && gameState.winnerId === myId);
+  const winnerName = gameState?.winnerId ? playerNameById.get(gameState.winnerId) || 'A player' : null;
+  const actionSetupNeedsAttention = now < actionSetupHighlightUntil;
+  const actionSetupHasTarget = Boolean(selectedTargetId);
 
   const paymentTurnForMe = pendingPayment?.currentPayerId === myId;
   const discardTurnForMe = pendingDiscard?.playerId === myId;
@@ -467,8 +555,35 @@ export default function GameBoard() {
     });
   }
 
-  function playCard(card: CardData, mode: 'bank' | 'property' | 'action') {
+  function playCard(card: CardData, mode: PlayMode) {
     if (!gameState) return;
+    const needsTargetSelection =
+      mode === 'action' &&
+      ((card.category === 'rent' && isAnyRentCard(card)) ||
+        (card.category === 'action' &&
+          (card.actionType === 'debt_collector' || card.actionType === 'deal_breaker')));
+    if (needsTargetSelection && !selectedTargetId) {
+      setActionSetupHighlightUntil(Date.now() + 4500);
+      setError('Select a target player in Action Setup first.');
+      return;
+    }
+
+    if (requiresActionSetup(card, mode)) {
+      setActionSetupHighlightUntil(Date.now() + 4500);
+      const targetName = playerNameById.get(selectedTargetId) || 'No target selected';
+      let setupSummary = `Target: ${targetName}`;
+      if (card.category === 'rent') {
+        setupSummary = isAnyRentCard(card)
+          ? `Target: ${targetName}\nSet color: ${colorLabel(selectedColor)}`
+          : `Set color: ${colorLabel(selectedColor)}\nTarget: All opponents`;
+      } else if (card.actionType === 'deal_breaker') {
+        setupSummary = `Target: ${targetName}\nSet color: ${colorLabel(selectedColor)}`;
+      }
+      const confirmed = window.confirm(`Use ${card.name} with this setup?\n\n${setupSummary}`);
+      if (!confirmed) {
+        return;
+      }
+    }
 
     const payload: Record<string, unknown> = {
       roomId: gameState.roomId,
@@ -476,7 +591,9 @@ export default function GameBoard() {
       mode,
     };
 
-    if (selectedTargetId) payload.targetPlayerId = selectedTargetId;
+    if (selectedTargetId && (card.category !== 'rent' || isAnyRentCard(card))) {
+      payload.targetPlayerId = selectedTargetId;
+    }
     if (card.category === 'rent') payload.rentColor = selectedColor;
 
     if (
@@ -847,7 +964,7 @@ export default function GameBoard() {
 
         {gameState?.started ? (
           <section className="rounded-2xl border border-white/20 bg-black/20 p-4 shadow-xl backdrop-blur">
-            <div className="grid gap-4 lg:grid-cols-[1fr_330px]">
+            <div className={`grid gap-4 ${pendingPayment ? 'lg:grid-cols-[1fr_330px]' : ''}`}>
               <div className="space-y-4">
                 <div className="rounded-xl border border-white/20 bg-black/25 p-3">
                   <p className="mb-2 text-xs uppercase tracking-[0.2em] text-emerald-100/80">Table center</p>
@@ -891,172 +1008,164 @@ export default function GameBoard() {
                 </div>
 
                 <div className="grid gap-3 xl:grid-cols-2">
-                  {gameState.players.map((player) => (
-                    <article
-                      key={player.id}
-                      className={`rounded-xl border p-3 ${
-                        player.id === myId ? 'border-emerald-300/45 bg-black/30' : 'border-sky-300/45 bg-black/35'
-                      }`}
-                    >
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-black text-white">{player.name}</span>
-                        {gameState.currentPlayerId === player.id ? (
-                          <span className="rounded-full bg-sky-400 px-2 py-0.5 text-[10px] font-black text-zinc-900">Turn</span>
-                        ) : null}
-                        {gameState.winnerId === player.id ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-black text-zinc-900">
-                            <Crown className="h-3 w-3" /> Winner
-                          </span>
-                        ) : null}
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px]">Hand: {player.id === myId ? player.hand.length : player.handCount}</span>
-                      </div>
+                  {tablePlayers.map((player) => {
+                    const currentCardSize = tableCardSize(player, player.id === myId);
+                    const rowCardLimit = stackCardsPerRow(currentCardSize);
+                    const overlapClass = stackOverlapClass(currentCardSize);
+                    const isCurrentTurnPlayer = gameState.currentPlayerId === player.id;
 
-                      <div className="mb-2 flex flex-wrap gap-2 text-[10px]">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1">
-                          <Wallet className="h-3 w-3" /> Bank ${player.bankTotal}M
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1">
-                          <HandCoins className="h-3 w-3" /> Full sets {player.fullSets.length}
-                        </span>
-                      </div>
-
-                      <div className="mb-2 rounded-lg border border-white/20 bg-white/5 p-2">
-                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-sky-100">
-                          Bank Cards (Visible)
-                        </p>
-                        <div className="flex flex-wrap gap-3">
-                          {groupCardsByKey(player.bank, bankStackKey).map((stack) => (
-                            <div key={stack[0].id} className="relative flex items-start">
-                              {stack.map((card, idx) => (
-                                <div
-                                  key={card.id}
-                                  className={idx === 0 ? '' : player.id === myId ? '-ml-16' : '-ml-24'}
-                                  style={{ zIndex: idx + 1 }}
-                                >
-                                  <Card
-                                    card={card}
-                                    compact={player.id === myId}
-                                    onCardClick={
-                                      isTableCardInteractive(player.id, card.id)
-                                        ? () => handleTableCardClick(player.id, card, 'bank')
-                                        : undefined
-                                    }
-                                    selected={isTableCardSelected(player.id, card.id)}
-                                  />
-                                </div>
-                              ))}
-                              {stack.length > 1 ? (
-                                <span className="absolute -right-2 -top-2 rounded-full bg-yellow-300 px-1.5 py-0.5 text-[9px] font-black text-zinc-900">
-                                  x{stack.length}
-                                </span>
-                              ) : null}
-                            </div>
-                          ))}
-                          {player.bank.length === 0 ? (
-                            <p className="text-xs text-zinc-300">No bank cards on table.</p>
+                    return (
+                      <article
+                        key={player.id}
+                        className={`overflow-x-hidden rounded-xl border p-3 ${
+                          player.id === myId ? 'xl:col-span-2 bg-black/30' : 'bg-black/35'
+                        } ${
+                          isCurrentTurnPlayer
+                            ? 'border-amber-300 ring-2 ring-amber-300/80 shadow-[0_0_18px_rgba(253,224,71,0.35)]'
+                            : player.id === myId
+                              ? 'border-emerald-300/45'
+                              : 'border-sky-300/45'
+                        }`}
+                      >
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-black text-white">{player.name}</span>
+                          {gameState.winnerId === player.id ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-black text-zinc-900">
+                              <Crown className="h-3 w-3" /> Winner
+                            </span>
                           ) : null}
+                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px]">
+                            Hand: {player.id === myId ? player.hand.length : player.handCount}
+                          </span>
                         </div>
-                      </div>
 
-                      <div className="space-y-2 rounded-lg border border-white/20 bg-white/5 p-2">
-                        <p className="text-[10px] font-black uppercase tracking-[0.1em] text-sky-100">
-                          Property Sets (Visible)
-                        </p>
-                        {Object.entries(player.properties)
-                          .filter(([, cards]) => cards.length > 0)
-                          .map(([color, cards]) => (
-                            <div key={color}>
-                              <p className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${SET_BADGE[color] || 'bg-white/20'}`}>
-                                {colorLabel(color)} ({cards.length})
-                              </p>
-                              <div className="flex flex-wrap gap-3">
-                                {[cards].map((stack) => (
-                                  <div key={stack[0].id} className="relative flex items-start">
-                                    {stack.map((card, idx) => (
-                                      <div
-                                        key={card.id}
-                                        className={idx === 0 ? '' : player.id === myId ? '-ml-16' : '-ml-24'}
-                                        style={{ zIndex: idx + 1 }}
-                                      >
-                                        <Card
-                                          card={card}
-                                          compact={player.id === myId}
-                                          setColor={color}
-                                          setCards={cards}
-                                          wildcardMoveOptions={
-                                            player.id === myId && card.category === 'wildcard'
-                                              ? wildcardMoveOptions(card)
-                                              : []
-                                          }
-                                          onWildcardMove={
-                                            player.id === myId && card.category === 'wildcard'
-                                              ? (nextColor) => moveWildcard(card.id, nextColor)
-                                              : undefined
-                                          }
-                                          onCardClick={
-                                            isTableCardInteractive(player.id, card.id)
-                                              ? () => handleTableCardClick(player.id, card, 'property', color)
-                                              : undefined
-                                          }
-                                          selected={isTableCardSelected(player.id, card.id)}
-                                        />
-                                      </div>
-                                    ))}
-                                    {stack.length > 1 ? (
-                                      <span className="absolute -right-2 -top-2 rounded-full bg-yellow-300 px-1.5 py-0.5 text-[9px] font-black text-zinc-900">
-                                        x{stack.length}
-                                      </span>
-                                    ) : null}
+                        <div className="mb-2 flex flex-wrap gap-2 text-[10px]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1">
+                            <Wallet className="h-3 w-3" /> Bank ${player.bankTotal}M
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1">
+                            <HandCoins className="h-3 w-3" /> Full sets {player.fullSets.length}
+                          </span>
+                        </div>
+
+                        <div className="mb-2 rounded-lg border border-white/20 bg-white/5 p-2">
+                          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-sky-100">
+                            Bank Cards (Visible)
+                          </p>
+                          <div className="flex flex-wrap items-start gap-3">
+                            {groupCardsByKey(player.bank, bankStackKey).map((stack) => {
+                              const rows = splitCardsIntoRows(stack, rowCardLimit);
+                              return (
+                                <div
+                                  key={`${bankStackKey(stack[0])}-${stack[0].id}`}
+                                  className="relative flex max-w-full flex-col gap-2"
+                                >
+                                  {rows.map((row, rowIdx) => (
+                                    <div key={`${stack[0].id}-bank-row-${rowIdx}`} className="flex min-w-0 items-start">
+                                      {row.map((card, idx) => (
+                                        <div
+                                          key={card.id}
+                                          className={idx === 0 ? '' : overlapClass}
+                                          style={{ zIndex: idx + 1 }}
+                                        >
+                                          <Card
+                                            card={card}
+                                            size={currentCardSize}
+                                            onCardClick={
+                                              isTableCardInteractive(player.id, card.id)
+                                                ? () => handleTableCardClick(player.id, card, 'bank')
+                                                : undefined
+                                            }
+                                            selected={isTableCardSelected(player.id, card.id)}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ))}
+                                  {stack.length > 1 ? (
+                                    <span className="absolute -right-2 -top-2 rounded-full bg-yellow-300 px-1.5 py-0.5 text-[9px] font-black text-zinc-900">
+                                      x{stack.length}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                            {player.bank.length === 0 ? (
+                              <p className="text-xs text-zinc-300">No bank cards on table.</p>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 rounded-lg border border-white/20 bg-white/5 p-2">
+                          <p className="text-[10px] font-black uppercase tracking-[0.1em] text-sky-100">
+                            Property Sets (Visible)
+                          </p>
+                          <div className="flex flex-wrap items-start gap-3">
+                            {Object.entries(player.properties)
+                              .filter(([, cards]) => cards.length > 0)
+                              .map(([color, cards]) => {
+                                const rows = splitCardsIntoRows(cards, rowCardLimit);
+                                return (
+                                  <div key={color} className="min-w-[220px] flex-1 rounded-lg border border-white/15 bg-black/20 p-2">
+                                    <p
+                                      className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                        SET_BADGE[color] || 'bg-white/20'
+                                      }`}
+                                    >
+                                      {colorLabel(color)} ({cards.length})
+                                    </p>
+                                    <div className="flex max-w-full flex-col gap-2">
+                                      {rows.map((row, rowIdx) => (
+                                        <div key={`${color}-property-row-${rowIdx}`} className="flex min-w-0 items-start">
+                                          {row.map((card, idx) => (
+                                            <div
+                                              key={card.id}
+                                              className={idx === 0 ? '' : overlapClass}
+                                              style={{ zIndex: idx + 1 }}
+                                            >
+                                              <Card
+                                                card={card}
+                                                size={currentCardSize}
+                                                setColor={color}
+                                                setCards={cards}
+                                                wildcardMoveOptions={
+                                                  player.id === myId && card.category === 'wildcard'
+                                                    ? wildcardMoveOptions(card)
+                                                    : []
+                                                }
+                                                onWildcardMove={
+                                                  player.id === myId && card.category === 'wildcard'
+                                                    ? (nextColor) => moveWildcard(card.id, nextColor)
+                                                    : undefined
+                                                }
+                                                onCardClick={
+                                                  isTableCardInteractive(player.id, card.id)
+                                                    ? () => handleTableCardClick(player.id, card, 'property', color)
+                                                    : undefined
+                                                }
+                                                selected={isTableCardSelected(player.id, card.id)}
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        {Object.values(player.properties).every((cards) => cards.length === 0) ? (
-                          <p className="text-xs text-zinc-300">No property cards on table.</p>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))}
+                                );
+                              })}
+                            {Object.values(player.properties).every((cards) => cards.length === 0) ? (
+                              <p className="text-xs text-zinc-300">No property cards on table.</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
 
-              <aside className="space-y-4">
-                <section className="rounded-xl border border-white/20 bg-black/30 p-3">
-                  <h2 className="text-sm font-black uppercase tracking-wide text-white">Action setup</h2>
-
-                  <label className="mt-2 block text-xs">
-                    Target Player
-                    <select
-                      className="mt-1 block w-full rounded border border-white/30 bg-white/95 px-2 py-1 text-zinc-900"
-                      value={selectedTargetId}
-                      onChange={(event) => setSelectedTargetId(event.target.value)}
-                    >
-                      {opponents.map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="mt-2 block text-xs">
-                    Set Color
-                    <select
-                      className="mt-1 block w-full rounded border border-white/30 bg-white/95 px-2 py-1 text-zinc-900"
-                      value={selectedColor}
-                      onChange={(event) => setSelectedColor(event.target.value)}
-                    >
-                      {PROPERTY_COLORS.map((color) => (
-                        <option key={color} value={color}>
-                          {colorLabel(color)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </section>
-
-                {pendingPayment ? (
+              {pendingPayment ? (
+                <aside className="space-y-4">
                   <section className="rounded-xl border border-cyan-300/40 bg-cyan-100/10 p-3">
                     <h3 className="text-sm font-black uppercase tracking-wide text-cyan-100">Payment Queue</h3>
                     <div className="mt-2 space-y-1 text-xs">
@@ -1067,77 +1176,139 @@ export default function GameBoard() {
                       ))}
                     </div>
                   </section>
-                ) : null}
-              </aside>
+                </aside>
+              ) : null}
             </div>
           </section>
         ) : null}
 
         {me && gameState?.started ? (
           <section className="rounded-2xl border border-white/20 bg-black/25 p-4 shadow-xl backdrop-blur">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="text-lg font-black text-white">Your Hand</h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-xs">
-                <Banknote className="h-4 w-4" /> {me.hand.length} cards
-              </span>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+              <div className="min-w-0">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="text-lg font-black text-white">Your Hand</h2>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-xs">
+                    <Banknote className="h-4 w-4" /> {me.hand.length} cards
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-start gap-3">
+                  {me.hand.map((card) => {
+                    const showBank = card.category !== 'property' && card.category !== 'wildcard';
+                    const showProperty =
+                      card.category === 'property' ||
+                      card.category === 'wildcard' ||
+                      card.actionType === 'house' ||
+                      card.actionType === 'hotel';
+
+                    return (
+                      <Card
+                        key={card.id}
+                        card={card}
+                        selected={discardTurnForMe && selectedDiscardIds.includes(card.id)}
+                        onCardClick={discardTurnForMe ? () => toggleDiscardCard(card.id) : undefined}
+                        actions={
+                          discardTurnForMe ? null : (
+                            <>
+                              {showProperty ? (
+                                <button
+                                  type="button"
+                                  disabled={!canPlayCards}
+                                  onClick={() => playCard(card, 'property')}
+                                  className="rounded bg-emerald-500 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                                >
+                                  To Property
+                                </button>
+                              ) : null}
+
+                              {showBank ? (
+                                <button
+                                  type="button"
+                                  disabled={!canPlayCards}
+                                  onClick={() => playCard(card, 'bank')}
+                                  className="rounded bg-zinc-200 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                                >
+                                  To Bank
+                                </button>
+                              ) : null}
+
+                              {canCardUseAction(card) ? (
+                                <button
+                                  type="button"
+                                  disabled={!canPlayCards}
+                                  onClick={() => playCard(card, 'action')}
+                                  className="rounded bg-sky-400 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                                >
+                                  Play Action
+                                </button>
+                              ) : null}
+                            </>
+                          )
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <section
+                className={`rounded-xl border p-3 transition ${
+                  actionSetupNeedsAttention
+                    ? 'border-amber-300 bg-amber-100/20 ring-2 ring-amber-300/80'
+                    : actionSetupHasTarget
+                      ? 'border-sky-300/70 bg-sky-100/15'
+                      : 'border-white/20 bg-black/30'
+                }`}
+              >
+                <h3 className="text-sm font-black uppercase tracking-wide text-white">Action Setup</h3>
+                <p className="mt-1 text-[11px] text-white/80">
+                  Current target: {playerNameById.get(selectedTargetId) || 'None'}
+                </p>
+                <label className="mt-2 block text-xs">
+                  Target Player (for Deal Breaker, Debt Collector, and Wild Rent)
+                  <select
+                    className="mt-1 block w-full rounded border border-white/30 bg-white/95 px-2 py-1 text-zinc-900"
+                    value={selectedTargetId}
+                    onChange={(event) => setSelectedTargetId(event.target.value)}
+                  >
+                    {opponents.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {player.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="mt-2 block text-xs">
+                  Set Color (used for Rent and Deal Breaker)
+                  <select
+                    className="mt-1 block w-full rounded border border-white/30 bg-white/95 px-2 py-1 text-zinc-900"
+                    value={selectedColor}
+                    onChange={(event) => setSelectedColor(event.target.value)}
+                  >
+                    {PROPERTY_COLORS.map((color) => (
+                      <option key={color} value={color}>
+                        {colorLabel(color)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </section>
             </div>
+          </section>
+        ) : null}
 
-            <div className="flex flex-wrap gap-3">
-              {me.hand.map((card) => {
-                const showBank = card.category !== 'property' && card.category !== 'wildcard';
-                const showProperty =
-                  card.category === 'property' ||
-                  card.category === 'wildcard' ||
-                  card.actionType === 'house' ||
-                  card.actionType === 'hotel';
-
-                return (
-                  <Card
-                    key={card.id}
-                    card={card}
-                    selected={discardTurnForMe && selectedDiscardIds.includes(card.id)}
-                    onCardClick={discardTurnForMe ? () => toggleDiscardCard(card.id) : undefined}
-                    actions={
-                      discardTurnForMe ? null : (
-                        <>
-                          {showProperty ? (
-                            <button
-                              type="button"
-                              disabled={!canPlayCards}
-                              onClick={() => playCard(card, 'property')}
-                              className="rounded bg-emerald-500 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                            >
-                              To Property
-                            </button>
-                          ) : null}
-
-                          {showBank ? (
-                            <button
-                              type="button"
-                              disabled={!canPlayCards}
-                              onClick={() => playCard(card, 'bank')}
-                              className="rounded bg-zinc-200 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                            >
-                              To Bank
-                            </button>
-                          ) : null}
-
-                          {canCardUseAction(card) ? (
-                            <button
-                              type="button"
-                              disabled={!canPlayCards}
-                              onClick={() => playCard(card, 'action')}
-                              className="rounded bg-sky-400 px-2 py-1 text-[10px] font-black text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                            >
-                              Play Action
-                            </button>
-                          ) : null}
-                        </>
-                      )
-                    }
-                  />
-                );
-              })}
+        {hasWinner && winnerName ? (
+          <section className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-white/30 bg-emerald-900/95 px-6 py-10 text-center shadow-2xl">
+              <p className="text-xs uppercase tracking-[0.28em] text-emerald-100/75">Game Over</p>
+              <h2 className="font-monopoly mt-4 text-4xl uppercase text-yellow-300 md:text-6xl">
+                {isWinner ? 'You Win!' : 'Better Luck Next Time'}
+              </h2>
+              <p className="mt-4 text-lg font-bold text-white">
+                {isWinner ? `${winnerName}, you own the board.` : `${winnerName} wins this round.`}
+              </p>
             </div>
           </section>
         ) : null}

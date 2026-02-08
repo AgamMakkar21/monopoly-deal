@@ -821,9 +821,22 @@ function applyResolvedAction(room, payload) {
   }
 
   if (payload.type === 'rent') {
-    const target = getPlayer(room, payload.targetPlayerId);
-    if (!target) {
-      return;
+    const targetIds =
+      Array.isArray(payload.targetPlayerIds) && payload.targetPlayerIds.length > 0
+        ? payload.targetPlayerIds
+        : payload.targetPlayerId
+          ? [payload.targetPlayerId]
+          : [];
+    const queue = [];
+    for (const targetId of targetIds) {
+      const target = getPlayer(room, targetId);
+      if (!target || target.id === actor.id) {
+        continue;
+      }
+      queue.push({
+        payerId: target.id,
+        amount: payload.amount || 0,
+      });
     }
 
     const started = startPendingPayment(room, {
@@ -831,12 +844,7 @@ function applyResolvedAction(room, payload) {
       receiverPlayerId: actor.id,
       actionType: 'rent',
       reason: `Rent (${payload.rentColor || 'set'})`,
-      queue: [
-        {
-          payerId: target.id,
-          amount: payload.amount || 0,
-        },
-      ],
+      queue,
     });
     if (!started) {
       room.lastEvent = `${actor.name} charged rent, but no payment was due`;
@@ -889,8 +897,15 @@ function applyResolvedAction(room, payload) {
       return;
     }
 
+    const availableFullSets = fullSetColors(target.properties);
+    const requestedColor =
+      typeof payload.setColor === 'string' && payload.setColor.length > 0
+        ? payload.setColor
+        : null;
     const candidateColor =
-      payload.setColor || fullSetColors(target.properties)[0] || null;
+      requestedColor && availableFullSets.includes(requestedColor)
+        ? requestedColor
+        : availableFullSets[0] || null;
 
     if (!candidateColor || !isFullSet(target.properties[candidateColor], candidateColor)) {
       room.lastEvent = `${actor.name} played Deal Breaker, but no full set was available`;
@@ -1203,13 +1218,8 @@ function playCard(socket, payload) {
   }
 
   if (handCard.category === 'rent') {
-    if (!payload.targetPlayerId || payload.targetPlayerId === player.id) {
-      player.hand.push(handCard);
-      emitError(socket, 'Rent requires one opponent target.');
-      return;
-    }
-
-    const rentChoices = handCard.rentColors?.[0] === 'any' ? PROPERTY_COLORS : handCard.rentColors || [];
+    const isAnyRent = handCard.rentColors?.[0] === 'any';
+    const rentChoices = isAnyRent ? PROPERTY_COLORS : handCard.rentColors || [];
     const requestedColor = payload.rentColor;
     const chosenColor = rentChoices.includes(requestedColor) ? requestedColor : rentChoices[0];
 
@@ -1237,10 +1247,34 @@ function playCard(socket, payload) {
     room.cardsPlayedThisTurn += 1;
     room.discard.push(handCard);
 
+    let targetPlayerIds = [];
+    if (isAnyRent) {
+      const targetedPlayer = getPlayer(room, payload.targetPlayerId);
+      if (!targetedPlayer || targetedPlayer.id === player.id) {
+        player.hand.push(handCard);
+        room.cardsPlayedThisTurn -= 1;
+        room.discard.pop();
+        emitError(socket, 'Wild rent requires one opponent target.');
+        return;
+      }
+      targetPlayerIds = [targetedPlayer.id];
+    } else {
+      targetPlayerIds = room.players.map((entry) => entry.id).filter((id) => id !== player.id);
+    }
+
+    if (targetPlayerIds.length === 0) {
+      player.hand.push(handCard);
+      room.cardsPlayedThisTurn -= 1;
+      room.discard.pop();
+      emitError(socket, isAnyRent ? 'Wild rent requires one opponent target.' : 'No opponents available for rent.');
+      return;
+    }
+
     const reactionPayload = {
       type: 'rent',
       actorId: player.id,
-      targetPlayerId: payload.targetPlayerId,
+      targetPlayerId: isAnyRent ? targetPlayerIds[0] : null,
+      targetPlayerIds,
       amount: rentAmount,
       rentColor: chosenColor,
     };
@@ -1249,7 +1283,7 @@ function playCard(socket, payload) {
     queuePendingReaction(room, {
       id: pendingId,
       sourcePlayerId: player.id,
-      targetPlayerIds: [payload.targetPlayerId],
+      targetPlayerIds,
       actionType: 'rent',
       payload: reactionPayload,
       expiresAt: Date.now() + REACTION_WINDOW_MS,

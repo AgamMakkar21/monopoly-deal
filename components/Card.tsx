@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowLeftRight, Building2, CircleDollarSign, HandCoins, Shield } from 'lucide-react';
 
 export type CardData = {
@@ -20,6 +20,7 @@ type CardProps = {
   wildcardMoveOptions?: string[];
   onWildcardMove?: (nextColor: string) => void;
   compact?: boolean;
+  size?: 'regular' | 'compact' | 'tiny';
   selected?: boolean;
   setColor?: string;
   setCards?: CardData[];
@@ -166,11 +167,14 @@ function faceColor(card: CardData): string {
   }
 
   if (card.category === 'rent') {
-    if (card.rentColors?.[0] === 'any') return '#6d28d9';
+    if (card.rentColors?.[0] === 'any') return '#050505';
     return COLOR_SOLID[card.rentColors?.[0] || 'neutral'] || COLOR_SOLID.neutral;
   }
 
-  if (card.category === 'wildcard') return '#ffffff';
+  if (card.category === 'wildcard') {
+    if (card.colors?.[0] === 'any') return '#050505';
+    return '#ffffff';
+  }
   return '#e4e4e7';
 }
 
@@ -197,6 +201,7 @@ function textColor(card: CardData): string {
 function cardTitle(card: CardData): string {
   if (card.category === 'money') return `$${card.value}M Money`;
   if (card.category === 'action') return ACTION_THEME[card.actionType || '']?.title || card.name;
+  if (card.category === 'wildcard' && card.colors?.[0] !== 'any' && (card.colors?.length || 0) >= 2) return 'Wildcard';
   return card.name;
 }
 
@@ -221,7 +226,7 @@ function detailText(card: CardData): string {
 
   if (card.category === 'wildcard') {
     if (card.colors?.[0] === 'any') return 'Works with all colors';
-    return (card.colors || []).map((color) => `${colorLabel(color)} (${setRequirement(color)})`).join(' / ');
+    return 'Use either banner color';
   }
 
   if (card.category === 'rent') {
@@ -324,15 +329,21 @@ export default function Card({
   wildcardMoveOptions = [],
   onWildcardMove,
   compact = false,
+  size,
   selected = false,
   setColor,
   setCards,
   onCardClick,
 }: CardProps) {
-  const cardWidth = compact ? 'w-[142px]' : 'w-[176px]';
+  const resolvedSize = size || (compact ? 'compact' : 'regular');
+  const isCompact = resolvedSize !== 'regular';
+  const isTiny = resolvedSize === 'tiny';
+  const cardWidth = resolvedSize === 'tiny' ? 'w-[116px]' : resolvedSize === 'compact' ? 'w-[142px]' : 'w-[176px]';
   const cardText = textColor(card);
   const badge = fullSetBadge(card);
   const bands = wildcardBands(card);
+  const [showWildcardSwitchMenu, setShowWildcardSwitchMenu] = useState(false);
+  const [pendingWildcardColor, setPendingWildcardColor] = useState<string | null>(null);
 
   const effectiveColor = card.category === 'property' ? (card.assignedColor || card.colors?.[0]) : null;
   const schedule = effectiveColor ? rentSchedule(effectiveColor) : [];
@@ -356,11 +367,29 @@ export default function Card({
     faceStyle.backgroundColor = '#050505';
   }
 
+  useEffect(() => {
+    if (!pendingWildcardColor) {
+      return;
+    }
+
+    if (card.assignedColor === pendingWildcardColor) {
+      setShowWildcardSwitchMenu(false);
+      setPendingWildcardColor(null);
+    }
+  }, [card.assignedColor, pendingWildcardColor]);
+
+  useEffect(() => {
+    if (!onWildcardMove || wildcardMoveOptions.length === 0) {
+      setShowWildcardSwitchMenu(false);
+      setPendingWildcardColor(null);
+    }
+  }, [onWildcardMove, wildcardMoveOptions]);
+
   return (
     <article
       className={`${cardWidth} rounded-2xl border-2 ${
         selected ? 'border-amber-400 ring-2 ring-amber-300' : 'border-zinc-100/90'
-      } bg-white p-2 shadow-[0_10px_24px_rgba(0,0,0,0.3)] transition-transform hover:-translate-y-0.5 ${
+      } ${useRainbowText ? 'bg-zinc-950' : 'bg-white'} ${isTiny ? 'p-1.5' : 'p-2'} shadow-[0_10px_24px_rgba(0,0,0,0.3)] transition-transform hover:-translate-y-0.5 ${
         onCardClick ? 'cursor-pointer' : ''
       }`}
       onClick={onCardClick}
@@ -419,21 +448,27 @@ export default function Card({
 
           <div className="space-y-1 text-center">
             <p
-              className={`mx-auto break-words px-1 font-black ${compact ? 'text-[10px] leading-3.5' : 'text-[12px] leading-4'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
+              className={`mx-auto break-words px-1 font-black ${
+                isTiny ? 'text-[9px] leading-3' : isCompact ? 'text-[10px] leading-3.5' : 'text-[12px] leading-4'
+              } ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
               style={lineClampStyle(2)}
             >
               <span style={rainbowStyle}>{cardTitle(card)}</span>
             </p>
 
             <p
-              className={`mx-auto break-words px-1 font-extrabold tracking-[0.01em] ${compact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
-              style={lineClampStyle(compact ? 1 : 2)}
+              className={`mx-auto break-words px-1 font-extrabold tracking-[0.01em] ${
+                isTiny ? 'text-[7px] leading-2.5' : isCompact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'
+              } ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]`}
+              style={lineClampStyle(isCompact ? 1 : 2)}
             >
               <span style={rainbowStyle}>{cardHint(card)}</span>
             </p>
 
             <p
-              className={`mx-auto break-words px-1 font-bold tracking-[0.01em] ${compact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'} ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.45)]`}
+              className={`mx-auto break-words px-1 font-bold tracking-[0.01em] ${
+                isTiny ? 'text-[7px] leading-2.5' : isCompact ? 'text-[8px] leading-3' : 'text-[9px] leading-3'
+              } ${cardText} [text-shadow:0_1px_1px_rgba(0,0,0,0.45)]`}
               style={lineClampStyle(2)}
             >
               <span style={rainbowStyle}>{detailText(card)}</span>
@@ -463,7 +498,11 @@ export default function Card({
           </div>
 
           <div className="flex justify-end">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-red-700 bg-white text-[12px] font-extrabold text-red-700 shadow-[0_2px_4px_rgba(0,0,0,0.35)]">
+            <div
+              className={`flex items-center justify-center rounded-full border-[3px] border-red-700 bg-white font-extrabold text-red-700 shadow-[0_2px_4px_rgba(0,0,0,0.35)] ${
+                isTiny ? 'h-8 w-8 text-[10px]' : 'h-10 w-10 text-[12px]'
+              }`}
+            >
               ${card.value}
             </div>
           </div>
@@ -471,20 +510,39 @@ export default function Card({
       </div>
 
       {onWildcardMove && wildcardMoveOptions.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
-          {wildcardMoveOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className="rounded border border-zinc-300 bg-white px-2 py-1 text-[10px] font-bold text-zinc-800 hover:bg-zinc-100"
-              onClick={(event) => {
+        <div className="mt-2 flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            className="rounded border border-zinc-300 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-800 hover:bg-zinc-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowWildcardSwitchMenu((previous) => !previous);
+            }}
+          >
+            Switch
+          </button>
+          {showWildcardSwitchMenu ? (
+            <select
+              value=""
+              className="rounded border border-zinc-300 bg-white px-2 py-1 text-[10px] font-bold text-zinc-800"
+              onChange={(event) => {
                 event.stopPropagation();
-                onWildcardMove(option);
+                const nextColor = event.target.value;
+                if (!nextColor) {
+                  return;
+                }
+                setPendingWildcardColor(nextColor);
+                onWildcardMove(nextColor);
               }}
             >
-              Move {colorLabel(option)}
-            </button>
-          ))}
+              <option value="">Choose color</option>
+              {wildcardMoveOptions.map((option) => (
+                <option key={option} value={option}>
+                  {colorLabel(option)}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
       ) : null}
 
